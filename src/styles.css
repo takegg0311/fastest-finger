@@ -1,0 +1,269 @@
+:root {
+  --bg: #10131a;
+  --fg: #f2f5fa;
+  --muted: #98a2b3;
+  --accent: #ffd54a;
+  --correct: #35c07f;
+  --wrong: #e5484d;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+}
+
+.app {
+  min-height: 100vh;
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.75rem;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 1.25rem;
+  letter-spacing: 0.2em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+/* 開始画面 */
+.start-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 4rem;
+}
+
+.start-button {
+  padding: 1.25rem 4rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1a1200;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.start-button:disabled {
+  background: #4a4f5c;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.error {
+  max-width: 34rem;
+  padding: 0.75rem 1rem;
+  color: #ffd7d8;
+  background: rgba(229, 72, 77, 0.15);
+  border: 1px solid var(--wrong);
+  border-radius: 0.5rem;
+  line-height: 1.7;
+}
+
+/* 問題文 */
+.question-view {
+  width: 100%;
+  min-height: 8rem;
+  padding: 1.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 0.75rem;
+}
+
+.question-text {
+  margin: 0;
+  font-size: 1.6rem;
+  line-height: 1.9;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+/* 読み上げ位置を示すカーソル */
+.cursor {
+  display: inline-block;
+  width: 0.12em;
+  height: 1.1em;
+  margin-left: 0.06em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* 早押しボタン */
+.buzz-button {
+  width: 11rem;
+  height: 11rem;
+  border-radius: 50%;
+  border: none;
+  background: radial-gradient(circle at 50% 35%, #ff6b6b, #b81d22);
+  box-shadow: 0 0.6rem 0 #7d1216, 0 0.9rem 1.5rem rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: transform 0.05s ease, box-shadow 0.05s ease;
+}
+
+.buzz-button:active:not(:disabled) {
+  transform: translateY(0.5rem);
+  box-shadow: 0 0.1rem 0 #7d1216, 0 0.2rem 0.6rem rgba(0, 0, 0, 0.4);
+}
+
+.buzz-button:disabled {
+  background: radial-gradient(circle at 50% 35%, #6b7280, #3f4653);
+  box-shadow: 0 0.6rem 0 #2a2f38;
+  cursor: not-allowed;
+}
+
+/* 回答入力 */
+.answer-input {
+  display: flex;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 34rem;
+}
+
+.answer-input input {
+  flex: 1;
+  padding: 0.9rem 1.1rem;
+  font-size: 1.15rem;
+  color: var(--fg);
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid #39404f;
+  border-radius: 0.5rem;
+}
+
+.answer-input input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.answer-input button {
+  padding: 0 1.75rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1a1200;
+  background: var(--accent);
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.answer-input button:disabled {
+  background: #4a4f5c;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted);
+}
+
+/* 結果表示 */
+.result-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  max-width: 34rem;
+  padding: 1.75rem;
+  border-radius: 0.75rem;
+  border: 2px solid;
+  animation: pop 0.3s ease-out;
+}
+
+.result-view.is-correct {
+  border-color: var(--correct);
+  background: rgba(53, 192, 127, 0.12);
+}
+
+.result-view.is-wrong {
+  border-color: var(--wrong);
+  background: rgba(229, 72, 77, 0.12);
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+}
+
+.result-mark {
+  margin: 0;
+  font-size: 4.5rem;
+  line-height: 1;
+}
+
+.is-correct .result-mark {
+  color: var(--correct);
+}
+
+.is-wrong .result-mark {
+  color: var(--wrong);
+}
+
+.result-label {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.result-detail {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 1rem;
+  margin: 0.5rem 0 0;
+  width: 100%;
+}
+
+.result-detail dt {
+  color: var(--muted);
+}
+
+.result-detail dd {
+  margin: 0;
+  font-weight: 700;
+}
+
+.result-full-text {
+  margin: 0.5rem 0 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.next-button {
+  margin-top: 0.5rem;
+  padding: 0.85rem 3rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #1a1200;
+  background: var(--accent);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
