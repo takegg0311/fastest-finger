@@ -20,6 +20,14 @@ npm install
 **出題データとジングル SE はリポジトリに含まれていない**（`.gitignore` で除外）。
 各自でローカルに配置する。
 
+ただしデータ形式のサンプルとして、`questions_example.csv` と
+対応する 1 問分の音声（`20260820/0.wav` / `.txt` / `.lab`）のみ追跡している。
+`questions_example.csv` を `questions.csv` にコピーすれば、この 1 問で動作する。
+
+```bash
+cp public/quiz_data/questions_example.csv public/quiz_data/questions.csv
+```
+
 #### 1. 問題データ — `public/quiz_data/`
 
 問題文と正解は `questions.csv` で管理し、VOICEPEAK の出力ファイルは
@@ -27,7 +35,8 @@ npm install
 
 ```
 public/quiz_data/
-├── questions.csv
+├── questions_example.csv   ← サンプル（追跡対象）
+├── questions.csv           ← 実データ（各自で用意）
 └── 20260820/          ← バッチ = VOICEPEAK プロジェクト 1 つ
     ├── 0.wav / 0.txt / 0.lab
     └── 1.wav / 1.txt / 1.lab
