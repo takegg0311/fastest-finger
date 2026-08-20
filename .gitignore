@@ -1,0 +1,14 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+
+# 出題データとジングル SE は各自ローカルに配置する（リポジトリには含めない）
+public/sound/*
+public/quiz_data/*
+
+# 上記データから生成されるため追跡しない
+public/quiz_data/manifest.json
+
+# 設計時の資料
+*.pdf
