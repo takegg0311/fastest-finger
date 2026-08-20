@@ -24,6 +24,21 @@ import type { LabFile, SpeechSegment } from './lab';
 /** チャンク境界とみなす文字。VOICEPEAK の読み上げはこれらの位置で pau が入りやすい */
 const CHUNK_DELIMITERS = /[、。，．？！?!]/;
 
+/**
+ * チャンク内部の 1 発話区間。統合で 1 チャンクにまとめた pau 区切りの単位で、
+ * この粒度で文字を配分すると、チャンク内に無音を含む場合でも表示が読みに追従する。
+ */
+type AlignedPart = {
+  /** 開始時刻（秒） */
+  start: number;
+  /** 終了時刻（秒） */
+  end: number;
+  /** 問題文全体における、この区間開始時点の表示済み文字数 */
+  charStart: number;
+  /** 問題文全体における、この区間終了時点の表示済み文字数 */
+  charEnd: number;
+};
+
 /** 対応付けられた 1 チャンク分の情報 */
 type AlignedChunk = {
   /** このチャンクが始まる時刻（秒） */
@@ -34,6 +49,11 @@ type AlignedChunk = {
   charStart: number;
   /** 問題文全体における、このチャンク終了時点の表示済み文字数 */
   charEnd: number;
+  /**
+   * チャンクを構成する発話区間。統合していない場合は 1 要素。
+   * 区間の切れ目（無音）では文字を進めないため、複数要素になることがある。
+   */
+  parts: AlignedPart[];
 };
 
 export type Alignment = {
@@ -82,26 +102,29 @@ function pickBoundaries(segments: SpeechSegment[], count: number): Set<number> {
 }
 
 /**
- * 発話区間を targetCount 個へ統合する。
+ * 発話区間を targetCount 個のグループへ統合する。
  *
  * 文中の息継ぎで生じた短い pau を境界から外し、読点相当の長い pau だけを
  * 残すことで、文字側のチャンクと 1 対 1 に対応させる。
+ *
+ * 統合しても元の区間は捨てず、グループ（= チャンク）を構成する区間の配列として返す。
+ * 吸収した pau の位置で文字を止めるため、この情報を後段の配分で使う。
  */
-function mergeSegments(segments: SpeechSegment[], targetCount: number): SpeechSegment[] {
-  if (segments.length <= targetCount) return segments;
+function mergeSegments(segments: SpeechSegment[], targetCount: number): SpeechSegment[][] {
+  if (segments.length <= targetCount) return segments.map((segment) => [segment]);
 
   const boundaries = pickBoundaries(segments, targetCount - 1);
-  const merged: SpeechSegment[] = [];
-  let current: SpeechSegment = { ...segments[0]! };
+  const merged: SpeechSegment[][] = [];
+  let current: SpeechSegment[] = [segments[0]!];
 
   for (let i = 1; i < segments.length; i += 1) {
     const segment = segments[i]!;
     if (boundaries.has(i)) {
       merged.push(current);
-      current = { ...segment };
+      current = [segment];
     } else {
-      // 境界にしない pau は読み飛ばし、直前の区間へ吸収させる
-      current.end = segment.end;
+      // 境界にしない pau はチャンクの内部に残す（文字はそこで進めない）
+      current.push(segment);
     }
   }
   merged.push(current);
@@ -153,14 +176,17 @@ export function buildAlignment(text: string, lab: LabFile): Alignment {
 
   // どちらかが空なら、全体を 1 チャンクとして時間比例で送る
   if (textChunks.length === 0 || segments.length === 0) {
+    const end = lab.duration > 0 ? lab.duration : 1;
+    const charEnd = [...normalizedText].length;
     return {
       text: normalizedText,
       chunks: [
         {
           start: 0,
-          end: lab.duration > 0 ? lab.duration : 1,
+          end,
           charStart: 0,
-          charEnd: [...normalizedText].length,
+          charEnd,
+          parts: [{ start: 0, end, charStart: 0, charEnd }],
         },
       ],
     };
@@ -174,14 +200,16 @@ export function buildAlignment(text: string, lab: LabFile): Alignment {
   let charCursor = 0;
 
   for (let i = 0; i < pairCount; i += 1) {
-    const segment = pairedSegments[i]!;
-    const charEnd = charCursor + [...pairedTextChunks[i]!].length;
+    const parts = pairedSegments[i]!;
+    const charCount = [...pairedTextChunks[i]!].length;
+    const charEnd = charCursor + charCount;
 
     chunks.push({
-      start: segment.start,
-      end: segment.end,
+      start: parts[0]!.start,
+      end: parts.at(-1)!.end,
       charStart: charCursor,
       charEnd,
+      parts: distributeChars(parts, charCursor, charCount),
     });
     charCursor = charEnd;
   }
@@ -190,10 +218,48 @@ export function buildAlignment(text: string, lab: LabFile): Alignment {
 }
 
 /**
+ * チャンクの文字数を、内部の発話区間へ配分する。
+ *
+ * 配分は各区間の発話時間の比で行う（無音は含めない）。区間をまたぐ長さの
+ * 偏りを吸収するためで、均等に割ると、短く発話される区間で文字が先行する。
+ *
+ * 端数は切り捨てで積み上げ、最後の区間へ寄せる。文字数の総和は必ず charCount に一致する。
+ */
+function distributeChars(
+  parts: SpeechSegment[],
+  charStart: number,
+  charCount: number,
+): AlignedPart[] {
+  const totalSpeech = parts.reduce((sum, part) => sum + (part.end - part.start), 0);
+  const aligned: AlignedPart[] = [];
+  let cursor = charStart;
+  let consumed = 0;
+
+  parts.forEach((part, index) => {
+    const isLast = index === parts.length - 1;
+    // 発話時間が 0 の異常データでは均等割りへ退避する
+    const ratio = totalSpeech > 0 ? (part.end - part.start) / totalSpeech : 1 / parts.length;
+    const count = isLast ? charCount - consumed : Math.floor(charCount * ratio);
+
+    aligned.push({
+      start: part.start,
+      end: part.end,
+      charStart: cursor,
+      charEnd: cursor + count,
+    });
+    cursor += count;
+    consumed += count;
+  });
+
+  return aligned;
+}
+
+/**
  * 再生位置 currentTime（秒）において表示すべき文字数を返す。
  *
- * チャンクとチャンクの間（無音区間）にいる場合は、直前のチャンクを読み終えた
- * 状態を保つ。文字だけが先に進んで見えるのを防ぐため。
+ * 無音区間にいる場合は、直前に読み終えた位置を保つ。文字だけが先に進んで
+ * 見えるのを防ぐため。これはチャンクの間だけでなく、チャンク内部に残った
+ * 短い pau についても同じように扱う。
  */
 export function visibleLength(alignment: Alignment, currentTime: number): number {
   const { chunks } = alignment;
@@ -208,15 +274,24 @@ export function visibleLength(alignment: Alignment, currentTime: number): number
   for (const chunk of chunks) {
     if (currentTime >= chunk.end) continue;
 
-    // 無音区間にいる: 直前のチャンクまで表示した状態で待つ
+    // チャンク間の無音区間にいる: 直前のチャンクまで表示した状態で待つ
     if (currentTime < chunk.start) return chunk.charStart;
 
-    const span = chunk.end - chunk.start;
-    if (span <= 0) return chunk.charEnd;
+    for (const part of chunk.parts) {
+      if (currentTime >= part.end) continue;
 
-    const progress = (currentTime - chunk.start) / span;
-    const charCount = chunk.charEnd - chunk.charStart;
-    return chunk.charStart + Math.floor(progress * charCount);
+      // チャンク内部の無音区間にいる: 直前の区間まで表示した状態で待つ
+      if (currentTime < part.start) return part.charStart;
+
+      const span = part.end - part.start;
+      if (span <= 0) return part.charEnd;
+
+      const progress = (currentTime - part.start) / span;
+      const charCount = part.charEnd - part.charStart;
+      return part.charStart + Math.floor(progress * charCount);
+    }
+
+    return chunk.charEnd;
   }
 
   return last.charEnd;
