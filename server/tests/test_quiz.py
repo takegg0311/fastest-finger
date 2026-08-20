@@ -6,7 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from app.quiz import QuizDataError, load_questions, pick_random, question_file_path
+from app.quiz import (
+    QuizDataError,
+    load_questions,
+    pick_random,
+    question_file_path,
+    seq_width,
+)
 
 HEADER = "batch,seq,text,answer,alt_answers\n"
 
@@ -33,16 +39,18 @@ def write_quiz_data(
     return directory
 
 
-def make_question_files(directory: Path, batch: str, seq: int, text: str) -> None:
+def make_question_files(
+    directory: Path, batch: str, seq: int, text: str, width: int = 1
+) -> None:
     """1 問分の wav / txt / lab を用意する。
 
     ファイル名の組み立ては本番と同じ question_file_path に委ね、
-    テスト側に命名規則を二重に書かない。
+    テスト側に命名規則を二重に書かない。width は連番のゼロ埋め桁数。
     """
     (directory / batch).mkdir(parents=True, exist_ok=True)
-    (directory / question_file_path(batch, seq, ".txt")).write_text(text, encoding="utf-8")
-    (directory / question_file_path(batch, seq, ".wav")).write_bytes(b"")
-    (directory / question_file_path(batch, seq, ".lab")).write_text(
+    (directory / question_file_path(batch, seq, ".txt", width)).write_text(text, encoding="utf-8")
+    (directory / question_file_path(batch, seq, ".wav", width)).write_bytes(b"")
+    (directory / question_file_path(batch, seq, ".lab", width)).write_text(
         "0 1000000 pau\n", encoding="utf-8"
     )
 
@@ -202,3 +210,143 @@ class TestPickRandom:
         # 乱数に依存するため繰り返して確認する
         for _ in range(30):
             assert pick_random(questions, exclude="20260820/0").id == "20260820/1"
+
+
+class TestSeqWidth:
+    """VOICEPEAK は出力数に応じて連番をゼロ埋めする。境界は出力数で決まる。"""
+
+    @pytest.mark.parametrize(
+        ("count", "expected"),
+        [
+            (1, 1),
+            (9, 1),  # 0〜8 なので 1 桁
+            (10, 2),  # 00〜09 なので 2 桁
+            (11, 2),
+            (99, 2),
+            (100, 3),  # 000〜099 なので 3 桁
+            (101, 3),
+        ],
+    )
+    def test_出力数から桁数を求める(self, count: int, expected: int) -> None:
+        assert seq_width(count) == expected
+
+    def test_ゼロ埋めしてパスを組み立てる(self) -> None:
+        assert question_file_path("20260821", 0, ".wav", 2) == "20260821/00-20260821.wav"
+        assert question_file_path("20260821", 10, ".wav", 2) == "20260821/10-20260821.wav"
+        assert question_file_path("20260821", 5, ".wav", 3) == "20260821/005-20260821.wav"
+
+
+class TestZeroPadding:
+    """バッチ内の連番の最大値から桁数を決める。"""
+
+    def test_10_問なら_2_桁で探索する(self, tmp_path: Path) -> None:
+        body = ""
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+            body += f"20260821,{seq},問題{seq},答え{seq},\n"
+        write_quiz_data(tmp_path, body)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 10
+        assert questions[0].wav == "20260821/00-20260821.wav"
+        assert questions[9].wav == "20260821/09-20260821.wav"
+        # ID は整数のまま。ゼロ埋めはファイル名だけの話である
+        assert questions[0].id == "20260821/0"
+
+    def test_9_問なら_ゼロ埋めしない(self, tmp_path: Path) -> None:
+        body = ""
+        for seq in range(9):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}")
+            body += f"20260821,{seq},問題{seq},答え{seq},\n"
+        write_quiz_data(tmp_path, body)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 9
+        assert questions[0].wav == "20260821/0-20260821.wav"
+        assert questions[8].wav == "20260821/8-20260821.wav"
+
+    def test_100_問なら_3_桁で探索する(self, tmp_path: Path) -> None:
+        body = ""
+        for seq in range(100):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=3)
+            body += f"20260821,{seq},問題{seq},答え{seq},\n"
+        write_quiz_data(tmp_path, body)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 100
+        assert questions[0].wav == "20260821/000-20260821.wav"
+        assert questions[99].wav == "20260821/099-20260821.wav"
+
+    def test_バッチごとに桁数を決める(self, tmp_path: Path) -> None:
+        """1 問だけのバッチと 10 問のバッチが混在しても、それぞれの桁数で解決する。"""
+        make_question_files(tmp_path, "20260820", 0, "単独の問題")
+        body = "20260820,0,単独の問題,答え,\n"
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+            body += f"20260821,{seq},問題{seq},答え{seq},\n"
+        write_quiz_data(tmp_path, body)
+
+        questions = {question.id: question for question in load_questions(tmp_path)}
+
+        assert questions["20260820/0"].wav == "20260820/0-20260820.wav"
+        assert questions["20260821/0"].wav == "20260821/00-20260821.wav"
+
+    def test_csv_の_seq_がゼロ埋めされていても同じ結果になる(self, tmp_path: Path) -> None:
+        """表計算ソフトで桁落ちしても壊れないよう、seq は整数として解釈する。"""
+        body = ""
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+            # CSV 側は 00, 01, ... とゼロ埋めして書く
+            body += f"20260821,{seq:02d},問題{seq},答え{seq},\n"
+        write_quiz_data(tmp_path, body)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 10
+        assert questions[0].id == "20260821/0"
+        assert questions[0].wav == "20260821/00-20260821.wav"
+
+    def test_行を削っても既存ファイルを見失わない(self, tmp_path: Path) -> None:
+        """桁数は seq の最大値から決める。行数基準だと 10 行を切った時点で破綻する。"""
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+
+        # 11 問出力したあと CSV を 9 行に減らした状況を模す。
+        # 実ファイルは 2 桁のままなので、9 行でも 2 桁で探さなければならない。
+        body = ""
+        for seq in [0, 1, 2, 3, 4, 6, 7, 8, 9]:
+            body += f"20260821,{seq},問題{seq},答え{seq},\n"
+        write_quiz_data(tmp_path, body)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 9
+        assert questions[0].wav == "20260821/00-20260821.wav"
+
+
+class TestExtraFiles:
+    """VOICEPEAK の副産物がバッチフォルダに同居しても壊れない。"""
+
+    def test_連結ファイルと_vpp_が同居しても読み込める(self, tmp_path: Path) -> None:
+        make_question_files(tmp_path, "20260821", 0, "問題0", width=2)
+        make_question_files(tmp_path, "20260821", 1, "問題1", width=2)
+        for seq in range(2, 10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+
+        # VOICEPEAK は連番ファイルとは別に、全体を連結した txt / lab も出力する。
+        # vpp は出力元のプロジェクトファイル。いずれも本システムでは使用しない。
+        batch_dir = tmp_path / "20260821"
+        (batch_dir / "20260821.txt").write_text("問題0\n問題1\n", encoding="utf-8")
+        (batch_dir / "20260821.lab").write_text("0 1000000 pau\n", encoding="utf-8")
+        (batch_dir / "20260821.vpp").write_bytes(b"dummy")
+
+        body = "".join(f"20260821,{seq},問題{seq},答え{seq},\n" for seq in range(10))
+        write_quiz_data(tmp_path, body)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 10
+        assert questions[0].wav == "20260821/00-20260821.wav"

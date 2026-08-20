@@ -30,15 +30,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 QUIZ_DATA_DIR = REPO_ROOT / "quiz_data"
 
 
-def question_file_path(batch: str, seq: int, ext: str) -> str:
+def seq_width(count: int) -> int:
+    """出力数から、連番のゼロ埋め桁数を求める。
+
+    VOICEPEAK は同じ接尾語で出力したファイル数に応じて連番をゼロ埋めする。
+    10 個以上なら 2 桁、100 個以上なら 3 桁。境界は連番の値ではなく出力数で
+    決まるため、9 個（0〜8）は 1 桁、10 個（00〜09）は 2 桁になる。
+    """
+    return len(str(max(count, 1)))
+
+
+def question_file_path(batch: str, seq: int, ext: str, width: int = 1) -> str:
     """1 問分のファイルの、quiz_data からの相対パスを組み立てる。
 
     VOICEPEAK は連番だけの出力ができず接尾語が必須のため、接尾語にバッチ名
     （日付）を指定する運用とし、`{batch}/{seq}-{batch}.{ext}` を期待する。
     接尾語がフォルダ名と一致することで、別バッチのファイルを取り違えて
     置いた場合にファイルが見つからず検出できる。
+
+    連番は width 桁までゼロ埋めする（`00-20260821.wav` など）。桁数は
+    バッチ内の出力数で決まるため、呼び出し側が seq_width で求めて渡す。
     """
-    return f"{batch}/{seq}-{batch}{ext}"
+    return f"{batch}/{seq:0{width}d}-{batch}{ext}"
 
 
 class QuizDataError(Exception):
@@ -87,8 +100,14 @@ def _to_answers(row: dict[str, str]) -> list[str]:
     return [row["answer"], *alternatives]
 
 
-def _validate_row(row: dict[str, str], line_number: int, quiz_data_dir: Path) -> _RowError:
-    """1 行を検証して Question にする。問題があれば理由を messages へ積む。"""
+def _validate_row(
+    row: dict[str, str], line_number: int, quiz_data_dir: Path, width: int
+) -> _RowError:
+    """1 行を検証して Question にする。問題があれば理由を messages へ積む。
+
+    width はバッチ内の連番のゼロ埋め桁数。バッチ全体を見ないと決まらないため
+    呼び出し側から渡す。
+    """
     label = f"{line_number} 行目"
     result = _RowError()
 
@@ -119,7 +138,7 @@ def _validate_row(row: dict[str, str], line_number: int, quiz_data_dir: Path) ->
     paths: dict[str, str] = {}
 
     for ext in REQUIRED_EXTENSIONS:
-        relative_path = question_file_path(row["batch"], seq, ext)
+        relative_path = question_file_path(row["batch"], seq, ext, width)
         if not (quiz_data_dir / relative_path).exists():
             result.messages.append(f"{label} ({question_id}): {relative_path} が見つかりません。")
             continue
@@ -190,6 +209,11 @@ def load_questions(quiz_data_dir: Path | None = None) -> list[Question]:
     questions: list[Question] = []
     seen_ids: dict[str, int] = {}
 
+    # ファイル名のゼロ埋め桁数はバッチ内の出力数で決まるため、行ごとの検証に入る前に
+    # 全行を読んでバッチごとの連番の最大値を集める。
+    rows: list[tuple[int, dict[str, str]]] = []
+    max_seq: dict[str, int] = {}
+
     for index, cells in enumerate(reader):
         # 空行は読み飛ばす
         if not any(cell.strip() for cell in cells):
@@ -201,8 +225,26 @@ def load_questions(quiz_data_dir: Path | None = None) -> list[Question]:
             name: (cells[position].strip() if position < len(cells) else "")
             for name, position in column_index.items()
         }
+        rows.append((line_number, row))
 
-        result = _validate_row(row, line_number, directory)
+        # 桁数の集計。ここでは検証せず、数として読めるものだけを見る。
+        # 不正な値は _validate_row が行番号つきで報告する。
+        try:
+            seq = int(row["seq"])
+        except ValueError:
+            continue
+        if seq < 0:
+            continue
+        batch = row["batch"]
+        if seq > max_seq.get(batch, -1):
+            max_seq[batch] = seq
+
+    # 連番は 0 起点なので、出力数は最大値 + 1。
+    # CSV の行数を使わないのは、行を削っても実ファイル名の桁数は変わらないため。
+    widths = {batch: seq_width(largest + 1) for batch, largest in max_seq.items()}
+
+    for line_number, row in rows:
+        result = _validate_row(row, line_number, directory, widths.get(row["batch"], 1))
         errors.extend(result.messages)
         if result.entry is None:
             continue
