@@ -1,4 +1,10 @@
-// Phase 4 で実装する。ビルドを通すための仮置き。
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { App } from './App';
 import '../styles.css';
 
-document.getElementById('root')!.textContent = '出題者用画面は準備中です';
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
