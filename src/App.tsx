@@ -152,7 +152,7 @@ export function App() {
   const handleSubmitAnswer = useCallback(
     (input: string) => {
       if (question === null) return;
-      const correct = isCorrect(input, question.id);
+      const correct = isCorrect(input, question.answers);
       dispatch({ type: 'judged', judgement: { input, correct } });
       void playJingle(correct ? 'correct' : 'wrong');
     },
@@ -222,7 +222,7 @@ export function App() {
             <ResultView
               correct={judgement.correct}
               input={judgement.input}
-              answer={formatAnswer(question.id)}
+              answer={formatAnswer(question.answers)}
               fullText={question.text}
               onNext={() => void startQuestion()}
             />

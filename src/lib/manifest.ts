@@ -10,11 +10,17 @@ import { buildAlignment, type Alignment } from './align';
 const QUIZ_DATA_DIR = '/quiz_data';
 
 export type ManifestEntry = {
-  /** 拡張子を除いたファイル名。そのままクイズの正解となる */
+  /** `{batch}/{seq}` 形式の問題 ID */
   id: string;
+  batch: string;
+  seq: number;
   wav: string;
   txt: string;
   lab: string;
+  /** 問題文。questions.csv 由来 */
+  text: string;
+  /** 正解と別解。先頭が主たる正解 */
+  answers: string[];
 };
 
 export type Question = {
@@ -22,12 +28,15 @@ export type Question = {
   /** 音声ファイルの URL */
   audioUrl: string;
   text: string;
+  answers: string[];
   lab: LabFile;
   alignment: Alignment;
 };
 
-function encodePath(fileName: string): string {
-  return `${QUIZ_DATA_DIR}/${encodeURIComponent(fileName)}`;
+/** manifest の相対パス（`{batch}/{seq}.{ext}`）を URL にする */
+function encodePath(relativePath: string): string {
+  const encoded = relativePath.split('/').map(encodeURIComponent).join('/');
+  return `${QUIZ_DATA_DIR}/${encoded}`;
 }
 
 export async function loadManifest(): Promise<ManifestEntry[]> {
@@ -45,26 +54,21 @@ export async function loadManifest(): Promise<ManifestEntry[]> {
 }
 
 export async function loadQuestion(entry: ManifestEntry): Promise<Question> {
-  const [text, labText] = await Promise.all([
-    fetch(encodePath(entry.txt)).then((r) => {
-      if (!r.ok) throw new Error(`${entry.txt} を読み込めませんでした。`);
-      return r.text();
-    }),
-    fetch(encodePath(entry.lab)).then((r) => {
-      if (!r.ok) throw new Error(`${entry.lab} を読み込めませんでした。`);
-      return r.text();
-    }),
-  ]);
+  // 問題文は manifest（questions.csv 由来）から取る。
+  // txt との一致はビルド時に検証済みのため、ここで読み直さない。
+  const response = await fetch(encodePath(entry.lab));
+  if (!response.ok) throw new Error(`${entry.lab} を読み込めませんでした。`);
 
-  const lab = parseLab(labText);
-  const trimmedText = text.trim();
+  const lab = parseLab(await response.text());
+  const text = entry.text.trim();
 
   return {
     id: entry.id,
     audioUrl: encodePath(entry.wav),
-    text: trimmedText,
+    text,
+    answers: entry.answers,
     lab,
-    alignment: buildAlignment(trimmedText, lab),
+    alignment: buildAlignment(text, lab),
   };
 }
 
