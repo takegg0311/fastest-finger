@@ -133,6 +133,9 @@ export function App() {
     audio?.pause();
     stopTracking();
 
+    // 押したことのフィードバックなので、鳴り終わりを待たずに回答へ進ませる
+    void playJingle('buzz');
+
     dispatch({ type: 'buzz', visibleLength: visibleLength(question.alignment, at) });
   }, [phase, question, currentTime, stopTracking]);
 

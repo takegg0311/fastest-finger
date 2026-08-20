@@ -8,6 +8,8 @@ const SOUND_DIR = '/sound';
 export const JINGLE = {
   /** 出題時 */
   set: `${SOUND_DIR}/set.WAV`,
+  /** 早押し時 */
+  buzz: `${SOUND_DIR}/buzz.WAV`,
   correct: `${SOUND_DIR}/correct.WAV`,
   wrong: `${SOUND_DIR}/wrong.WAV`,
 } as const;

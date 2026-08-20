@@ -45,6 +45,7 @@ public/quiz_data/
 | ファイル名 | 再生タイミング |
 | --- | --- |
 | `set.WAV` | 出題時（この再生完了後に問題音声が始まる） |
+| `buzz.WAV` | 早押し時 |
 | `correct.WAV` | 正解時 |
 | `wrong.WAV` | 不正解時 |
 
