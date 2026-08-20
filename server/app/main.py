@@ -1,0 +1,143 @@
+"""FastAPI アプリ本体。
+
+起動時に questions.csv を検証し、問題があれば起動を止める。
+静的ファイル（web/dist と quiz_data）の配信もここが担う。
+
+注意: uvicorn は --workers 1 で起動すること。
+ルーム状態はプロセス内のメモリに持つため、ワーカーを増やすと状態が分裂する。
+"""
+
+from __future__ import annotations
+
+import secrets
+import socket
+import sys
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
+
+from .quiz import QUIZ_DATA_DIR, REPO_ROOT, QuizDataError, Question, load_questions
+
+WEB_DIST_DIR = REPO_ROOT / "web" / "dist"
+
+# 出題者だけが操作できるようにするためのトークン。
+# 同一 LAN のクローズドな利用が前提なので、起動ごとの乱数 1 本で足りる。
+HOST_TOKEN = secrets.token_urlsafe(16)
+
+
+def detect_lan_ip() -> str:
+    """参加者に配る URL に載せる LAN IP を調べる。
+
+    外へパケットは出さず、ルーティングテーブル上の送信元アドレスだけを得る。
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect(("8.8.8.8", 80))
+            return str(sock.getsockname()[0])
+        except OSError:
+            return "127.0.0.1"
+
+
+def _print_banner(port: int, question_count: int) -> None:
+    lan_ip = detect_lan_ip()
+    print()
+    print(f"  問題数: {question_count} 問")
+    print()
+    print(f"  出題者用: http://localhost:{port}/host?token={HOST_TOKEN}")
+    print(f"  参加者用: http://{lan_ip}:{port}/player")
+    print()
+
+
+def _load_questions_or_exit() -> list[Question]:
+    """検証に失敗したら起動させない。
+
+    ズレたまま出題されるとクイズを遊ぶまで気づけないため、ここで止める。
+    lifespan の中で SystemExit を投げても Starlette に握られて終了コードが
+    0 になってしまうので、アプリを組み立てる前に検証する。
+    """
+    try:
+        return load_questions()
+    except QuizDataError as error:
+        print(f"[quiz_data] {error}", file=sys.stderr)
+        raise SystemExit(1) from None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _print_banner(_current_port(), len(app.state.questions))
+    yield
+
+
+def _current_port() -> int:
+    """バナー表示用にポートを拾う。uvicorn の引数から取れなければ既定値。"""
+    for index, arg in enumerate(sys.argv):
+        if arg == "--port" and index + 1 < len(sys.argv):
+            try:
+                return int(sys.argv[index + 1])
+            except ValueError:
+                break
+    return 8000
+
+
+app = FastAPI(title="fastest-finger", lifespan=lifespan)
+app.state.questions = _load_questions_or_exit()
+app.state.host_token = HOST_TOKEN
+
+
+@app.get("/api/questions")
+async def list_questions() -> list[dict[str, object]]:
+    """問題一覧を返す。動作確認用。
+
+    回答者へ配る情報ではないため、出題者画面と開発時の確認にのみ使う。
+    """
+    questions: list[Question] = app.state.questions
+    return [
+        {
+            "id": question.id,
+            "batch": question.batch,
+            "seq": question.seq,
+            "text": question.text,
+            "answers": question.answers,
+            "audio_url": question.audio_url(),
+            "lab_url": question.lab_url(),
+        }
+        for question in questions
+    ]
+
+
+@app.get("/api/room")
+async def room_info() -> dict[str, object]:
+    """参加用 URL を返す。出題者画面が QR を描くために使う。"""
+    return {
+        "lan_ip": detect_lan_ip(),
+        "port": _current_port(),
+        "join_url": f"http://{detect_lan_ip()}:{_current_port()}/player",
+        "question_count": len(app.state.questions),
+    }
+
+
+# 出題音声・音素ラベルの配信。PoC と共有しているルートの quiz_data を直接見る。
+app.mount("/quiz_data", StaticFiles(directory=QUIZ_DATA_DIR), name="quiz_data")
+
+# ジングル SE
+_sound_dir = REPO_ROOT / "sound"
+if _sound_dir.is_dir():
+    app.mount("/sound", StaticFiles(directory=_sound_dir), name="sound")
+
+
+# フロントエンドの配信。本番は 1 ポートに寄せ、参加者に配る URL を 1 つにする。
+# 開発時は Vite dev server 側から /api・/ws をプロキシするため、ここは無くてよい。
+if WEB_DIST_DIR.is_dir():
+
+    @app.get("/host")
+    async def host_page() -> FileResponse:
+        return FileResponse(WEB_DIST_DIR / "host.html")
+
+    @app.get("/player")
+    async def player_page() -> FileResponse:
+        return FileResponse(WEB_DIST_DIR / "player.html")
+
+    app.mount("/", StaticFiles(directory=WEB_DIST_DIR), name="web")

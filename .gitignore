@@ -21,5 +21,11 @@ quiz_data/20260820/*
 # 上記データから生成されるため追跡しない
 quiz_data/manifest.json
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
 # 設計時の資料
 *.pdf

@@ -1,0 +1,22 @@
+[project]
+name = "fastest-finger-server"
+version = "0.1.0"
+description = "オンライン早押しクイズのバックエンド"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "websockets>=14",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "httpx>=0.28",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+package = false
