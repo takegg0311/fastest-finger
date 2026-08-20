@@ -22,23 +22,46 @@ npm install
 
 #### 1. 問題データ — `public/quiz_data/`
 
-VOICEPEAK で出力した以下 3 点を、**同一のファイル名**で置く。
-
-| 拡張子 | 内容 |
-| --- | --- |
-| `.wav` | 読み上げ音声 |
-| `.txt` | 読み上げ全文 |
-| `.lab` | 音素ラベル（HTK 形式） |
-
-**ファイル名がそのままクイズの正解になる。** 括弧内は別表記の正解として扱われる。
+問題文と正解は `questions.csv` で管理し、VOICEPEAK の出力ファイルは
+**リネームせず**バッチ（日付）フォルダにそのまま置く。
 
 ```
 public/quiz_data/
-├── エベレスト.wav / .txt / .lab
-└── パイソン(Python).wav / .txt / .lab   ← 「パイソン」「Python」どちらでも正解
+├── questions.csv
+└── 20260820/          ← バッチ = VOICEPEAK プロジェクト 1 つ
+    ├── 0.wav / 0.txt / 0.lab
+    └── 1.wav / 1.txt / 1.lab
 ```
 
-3 点が揃っていないファイル名は出題対象から外れる（実行時に警告が出る）。
+`questions.csv` は 5 列。
+
+```csv
+batch,seq,text,answer,alt_answers
+20260820,0,日本で一番高い山は富士山ですが、世界で一番高い山はどこ？,エベレスト,
+20260820,1,大蛇を意味する名を持つプログラミング言語は何でしょう？,Python,パイソン|ニシキヘビ
+```
+
+| 列 | 内容 |
+| --- | --- |
+| `batch` | バッチ名（`YYYYMMDD`）。`public/quiz_data/{batch}/` に対応 |
+| `seq` | VOICEPEAK が出力した連番（0 起点）。`{seq}.wav` などに対応 |
+| `text` | 問題文。**改行を含めない**（1 問 1 ブロック） |
+| `answer` | 正解 |
+| `alt_answers` | 別解。`\|` 区切りで複数指定可。無ければ空 |
+
+VOICEPEAK は連番を 0 起点でしか振れず接頭語も付けられないため、
+バッチフォルダと連番の組で一意性を与えている。
+
+##### 問題を追加する手順
+
+1. `questions.csv` の `text` 列を表計算ソフトでまとめて選択し、VOICEPEAK に貼り付ける
+   （改行がそのままブロック分割になる）
+2. `public/quiz_data/{バッチ名}/` へ連番出力する（接尾語なし）
+3. `npm run manifest` を実行する
+
+CSV の `text` と出力された `.txt` の中身が一致しない場合、
+どの行がズレているかを報告してビルドが止まる。
+同日に作り直す場合は、同じフォルダへ先頭から再出力する。
 
 #### 2. ジングル SE — `public/sound/`
 
@@ -55,7 +78,7 @@ public/quiz_data/
 npm run dev
 ```
 
-`npm run dev` / `npm run build` は、実行前に `public/quiz_data` を走査して
+`npm run dev` / `npm run build` は、実行前に `questions.csv` を読んで
 問題一覧 `manifest.json` を自動生成する。データを追加・削除した際は再実行する。
 
 manifest だけを作り直したい場合:
@@ -94,14 +117,14 @@ VOICEPEAK の読み上げでは `pau` が読点の位置とよく一致するた
 ## 構成
 
 ```
-scripts/build-manifest.ts   問題一覧 manifest.json の生成
+scripts/build-manifest.ts   questions.csv の検証と manifest.json の生成
 src/
 ├── App.tsx                 画面全体と音声再生の制御
 ├── state/quizMachine.ts    出題サイクルの状態遷移
 ├── lib/
 │   ├── lab.ts              .lab パーサ（HTK 形式 → 秒、pau 区間の抽出）
 │   ├── align.ts            音声と問題文の対応付け
-│   ├── answer.ts           ファイル名からの正解抽出と正誤判定
+│   ├── answer.ts           正誤判定（正解・別解との照合）
 │   ├── manifest.ts         問題の読み込みと抽選
 │   └── sound.ts            ジングル SE の再生
 └── components/             画面パーツ
