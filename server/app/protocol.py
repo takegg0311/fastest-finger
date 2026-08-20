@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------- 共通
 
-Phase = Literal["idle", "reading", "buzzed", "timeUp", "result"]
+Phase = Literal["idle", "reading", "readingEnded", "buzzed", "check", "timeUp", "result"]
 
 # 早押しを受け付けなかった理由
 BuzzRejectReason = Literal["too_late", "stale_round", "locked_out", "wrong_phase"]
@@ -51,8 +51,9 @@ class QuestionView(BaseModel):
     text: str
     audio_url: str
     lab_url: str
-    # 正解と別解。出題者が手元で確認するために使う
-    answers: list[str]
+    # 正解と別解。投影は参加者も見るため、正解を出してよい phase
+    # （check / timeUp / result）でのみ値が入る。それ以外は None。
+    answers: list[str] | None = None
 
 
 class JudgementView(BaseModel):
@@ -92,9 +93,31 @@ class StartQuestionMessage(BaseModel):
 
 
 class ReadingEndedMessage(BaseModel):
-    """押されないまま問題音声を読み切った。出題者フロントが送る。"""
+    """問題音声を最後まで再生し終えた。出題者フロントが自動で送る。
+
+    読み切っても早押しは受け付け続ける（readingEnded）。
+    締め切るのは出題者が time_up を押したとき。
+    """
 
     type: Literal["reading_ended"] = "reading_ended"
+    round_id: int
+
+
+class TimeUpMessage(BaseModel):
+    """出題者が回答の受付を締め切る。ここで正解を投影に出す。"""
+
+    type: Literal["time_up"] = "time_up"
+    round_id: int
+
+
+class CheckMessage(BaseModel):
+    """回答を聞き終えたので正解を確認する。ここで初めて正解を投影に出す。
+
+    buzzed のうちは正解を出さない。投影は参加者も見るため、
+    回答権を得た時点で正解が見えると、それを読んで答えられてしまう。
+    """
+
+    type: Literal["check"] = "check"
     round_id: int
 
 
@@ -121,6 +144,8 @@ ClientMessage = Annotated[
     | BuzzMessage
     | StartQuestionMessage
     | ReadingEndedMessage
+    | TimeUpMessage
+    | CheckMessage
     | JudgeMessage
     | ReleaseMessage
     | NextMessage,

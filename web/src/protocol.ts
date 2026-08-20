@@ -3,7 +3,19 @@
  * 片方を変えたらもう片方も変えること。
  */
 
-export type Phase = 'idle' | 'reading' | 'buzzed' | 'timeUp' | 'result';
+export type Phase =
+  | 'idle'
+  /** 問題音声を再生中。早押しを受け付ける */
+  | 'reading'
+  /** 読み切ったが、まだ締め切っていない。早押しを受け付ける */
+  | 'readingEnded'
+  /** 誰かが回答権を得た。正解はまだ出さない */
+  | 'buzzed'
+  /** 正解を確認して正誤を判定する。ここで正解が投影に出る */
+  | 'check'
+  /** 誰も押さずに締め切った */
+  | 'timeUp'
+  | 'result';
 
 export type BuzzRejectReason =
   | 'too_late'
@@ -31,7 +43,11 @@ export type QuestionView = {
   text: string;
   audio_url: string;
   lab_url: string;
-  answers: string[];
+  /**
+   * 正解と別解。投影は参加者も見るため、正解を出してよい phase
+   * （check / timeUp / result）でのみ値が入る。それ以外は null。
+   */
+  answers: string[] | null;
 };
 
 export type JudgementView = {
@@ -48,6 +64,8 @@ export type ClientMessage =
   | { type: 'buzz'; round_id: number; client_sent_at?: number }
   | { type: 'start_question'; question_id?: string | null }
   | { type: 'reading_ended'; round_id: number }
+  | { type: 'time_up'; round_id: number }
+  | { type: 'check'; round_id: number }
   | { type: 'judge'; round_id: number; correct: boolean }
   | { type: 'release'; round_id: number }
   | { type: 'next' };

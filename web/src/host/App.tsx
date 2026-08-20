@@ -187,6 +187,14 @@ export function App() {
     send({ type: 'start_question' });
   }, [send]);
 
+  const handleTimeUp = useCallback(() => {
+    send({ type: 'time_up', round_id: roundId });
+  }, [roundId, send]);
+
+  const handleCheck = useCallback(() => {
+    send({ type: 'check', round_id: roundId });
+  }, [roundId, send]);
+
   const handleJudge = useCallback(
     (correct: boolean) => {
       send({ type: 'judge', round_id: roundId, correct });
@@ -241,12 +249,17 @@ export function App() {
 
         <QuestionView
           text={question === null ? '' : [...question.text].slice(0, shownLength).join('')}
-          fullText={phase === 'result' || phase === 'timeUp' ? (question?.text ?? '') : null}
-          answers={
-            phase === 'buzzed' || phase === 'timeUp' || phase === 'result'
-              ? (question?.answers ?? [])
-              : []
+          // 全文を見せるのは、もう早押しを受け付けない段になってから
+          fullText={
+            phase === 'check' || phase === 'timeUp' || phase === 'result'
+              ? (question?.text ?? '')
+              : null
           }
+          // 正解を出してよい phase かどうかはサーバが決める。
+          // 送られてこない phase では answers が null になっている。
+          // useQuestion は .lab の取得結果をキャッシュしていて phase の変化に
+          // 追従しないので、room_state から直接読む
+          answers={state?.question?.answers ?? null}
           judgement={state?.judgement ?? null}
         />
       </section>
@@ -261,6 +274,8 @@ export function App() {
           phase={phase}
           connected={status === 'open'}
           onStart={handleStart}
+          onTimeUp={handleTimeUp}
+          onCheck={handleCheck}
           onJudge={handleJudge}
           onRelease={handleRelease}
           onNext={handleNext}

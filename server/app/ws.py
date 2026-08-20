@@ -188,6 +188,20 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
                     if room.reading_ended(message.round_id):
                         await manager.broadcast_state(room)
 
+                case "time_up":
+                    if not _require_host(is_host):
+                        await _deny(manager, websocket)
+                        continue
+                    if room.time_up(message.round_id):
+                        await manager.broadcast_state(room)
+
+                case "check":
+                    if not _require_host(is_host):
+                        await _deny(manager, websocket)
+                        continue
+                    if room.check(message.round_id):
+                        await manager.broadcast_state(room)
+
                 case "judge":
                     if not _require_host(is_host):
                         await _deny(manager, websocket)

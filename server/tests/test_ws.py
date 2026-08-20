@@ -122,7 +122,8 @@ class TestJoin:
             player_state = receive_until(player, "room_state", where=is_reading)
 
             assert host_state["question"] is not None
-            assert host_state["question"]["answers"]
+            # 読み上げ中は出題者にも正解を送らない（投影は参加者も見る）
+            assert host_state["question"]["answers"] is None
             assert player_state["question"] is None
 
 
@@ -146,6 +147,8 @@ class TestHostAuth:
         [
             {"type": "start_question"},
             {"type": "reading_ended", "round_id": 1},
+            {"type": "time_up", "round_id": 1},
+            {"type": "check", "round_id": 1},
             {"type": "judge", "round_id": 1, "correct": True},
             {"type": "release", "round_id": 1},
             {"type": "next"},
@@ -261,7 +264,14 @@ class TestFlow:
 
             player.send_json({"type": "buzz", "round_id": round_id})
             receive_until(host, "buzz_accepted")
-            receive_until(host, "room_state", where=lambda m: m["phase"] == "buzzed")
+            buzzed = receive_until(host, "room_state", where=lambda m: m["phase"] == "buzzed")
+            # 回答権を得ただけでは正解を出さない
+            assert buzzed["question"]["answers"] is None
+
+            host.send_json({"type": "check", "round_id": round_id})
+            checked = receive_until(host, "room_state", where=lambda m: m["phase"] == "check")
+            # 正解を確認する段になって初めて送られる
+            assert checked["question"]["answers"]
 
             host.send_json({"type": "judge", "round_id": round_id, "correct": True})
             judged = receive_until(host, "room_state", where=lambda m: m["phase"] == "result")
@@ -271,44 +281,91 @@ class TestFlow:
             host.send_json({"type": "next"})
             receive_until(host, "room_state", where=lambda m: m["phase"] == "idle")
 
-    def test_お手つき解除で他の人が押せる(self, client: TestClient) -> None:
+    def test_押し間違いを解除すると本人がまた押せる(self, client: TestClient) -> None:
+        """誤って押してしまった事故の逃げ口。判定を経ていないので罰しない。"""
         with (
             client.websocket_connect("/ws") as host,
-            client.websocket_connect("/ws") as first,
-            client.websocket_connect("/ws") as second,
+            client.websocket_connect("/ws") as player,
         ):
             host.send_json({"type": "host_hello", "host_token": HOST_TOKEN})
-            first.send_json({"type": "join", "name": "たけ"})
-            second.send_json({"type": "join", "name": "はな"})
-            for socket in (host, first, second):
-                receive_until(socket, "welcome")
+            player.send_json({"type": "join", "name": "たけ"})
+            receive_until(host, "welcome")
+            receive_until(player, "welcome")
 
             host.send_json({"type": "start_question"})
             round_id = receive_until(
                 host, "room_state", where=lambda m: m["phase"] == "reading"
             )["round_id"]
 
-            first.send_json({"type": "buzz", "round_id": round_id})
+            player.send_json({"type": "buzz", "round_id": round_id})
             receive_until(host, "buzz_accepted")
 
-            host.send_json({"type": "judge", "round_id": round_id, "correct": False})
-            receive_until(host, "room_state", where=lambda m: m["phase"] == "result")
-
             host.send_json({"type": "release", "round_id": round_id})
-            receive_until(
+            released = receive_until(
                 host,
                 "room_state",
                 where=lambda m: m["phase"] == "reading" and m["buzzed"] is None,
             )
-
-            # 誤答した人は弾かれ、もう 1 人は押せる
-            first.send_json({"type": "buzz", "round_id": round_id})
-            assert receive_until(first, "buzz_rejected")["reason"] == "locked_out"
+            assert [p for p in released["players"] if p["locked_out"]] == []
 
             # 同じラウンド内の 2 度目の buzz なので round_id では区別できない。
-            # 1 度目（たけ）の buzz_accepted がキューに残っているため名前で待つ。
-            second.send_json({"type": "buzz", "round_id": round_id})
-            receive_until(second, "buzz_accepted", where=lambda m: m["name"] == "はな")
+            # 1 度目の buzz_accepted がキューに残っているため round_id ではなく
+            # 「buzzed が自分になった room_state」で待つ。
+            player.send_json({"type": "buzz", "round_id": round_id})
+            receive_until(host, "room_state", where=lambda m: m["phase"] == "buzzed")
+
+    def test_読み切っても締め切るまで押せる(self, client: TestClient) -> None:
+        """読み切ってから数秒は押させるのが通例のため。"""
+        with (
+            client.websocket_connect("/ws") as host,
+            client.websocket_connect("/ws") as player,
+        ):
+            host.send_json({"type": "host_hello", "host_token": HOST_TOKEN})
+            player.send_json({"type": "join", "name": "たけ"})
+            receive_until(host, "welcome")
+            receive_until(player, "welcome")
+
+            host.send_json({"type": "start_question"})
+            round_id = receive_until(
+                host, "room_state", where=lambda m: m["phase"] == "reading"
+            )["round_id"]
+
+            # 音声を読み切っても締め切らない
+            host.send_json({"type": "reading_ended", "round_id": round_id})
+            ended = receive_until(
+                host, "room_state", where=lambda m: m["phase"] == "readingEnded"
+            )
+            assert ended["question"]["answers"] is None
+
+            # まだ押せる
+            player.send_json({"type": "buzz", "round_id": round_id})
+            receive_until(host, "buzz_accepted")
+
+    def test_誰も押さずに締め切ると正解が出る(self, client: TestClient) -> None:
+        with (
+            client.websocket_connect("/ws") as host,
+            client.websocket_connect("/ws") as player,
+        ):
+            host.send_json({"type": "host_hello", "host_token": HOST_TOKEN})
+            player.send_json({"type": "join", "name": "たけ"})
+            receive_until(host, "welcome")
+            receive_until(player, "welcome")
+
+            host.send_json({"type": "start_question"})
+            round_id = receive_until(
+                host, "room_state", where=lambda m: m["phase"] == "reading"
+            )["round_id"]
+
+            host.send_json({"type": "reading_ended", "round_id": round_id})
+            receive_until(host, "room_state", where=lambda m: m["phase"] == "readingEnded")
+
+            host.send_json({"type": "time_up", "round_id": round_id})
+            timed_up = receive_until(host, "room_state", where=lambda m: m["phase"] == "timeUp")
+            assert timed_up["question"]["answers"]
+
+            # 締め切った後は押せない
+            player.send_json({"type": "buzz", "round_id": round_id})
+            assert receive_until(player, "buzz_rejected")["reason"] == "wrong_phase"
 
     def test_切断しても一覧に残る(self, client: TestClient) -> None:
         with client.websocket_connect("/ws") as host:

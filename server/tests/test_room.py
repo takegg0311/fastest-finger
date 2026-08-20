@@ -200,15 +200,23 @@ class TestBuzz:
         assert result.reason == "wrong_phase"
 
     def test_お手つき中の回答者は弾く(self, started_room: Room) -> None:
-        """完了条件: locked_out の回答者は locked_out。"""
+        """完了条件: locked_out の回答者は locked_out。
+
+        判定で locked_out になった後、同じラウンドで再度出題し直しても弾かれる。
+        """
         first_id, second_id = list(started_room.players)
+        round_id = started_room.round_id
 
-        started_room.buzz(first_id, started_room.round_id)
-        started_room.judge(started_room.round_id, correct=False)
-        started_room.release(started_room.round_id)
+        started_room.buzz(first_id, round_id)
+        started_room.check(round_id)
+        started_room.judge(round_id, correct=False)
 
-        rejected = started_room.buzz(first_id, started_room.round_id)
-        accepted = started_room.buzz(second_id, started_room.round_id)
+        # 判定後は result なので、押せる phase へ戻して確認する
+        started_room.phase = "reading"
+        started_room.buzzed = None
+
+        rejected = started_room.buzz(first_id, round_id)
+        accepted = started_room.buzz(second_id, round_id)
 
         assert rejected.accepted is False
         assert rejected.reason == "locked_out"
@@ -229,9 +237,20 @@ class TestBuzz:
 
 
 class TestReadingEnded:
-    def test_読み切ると_timeup_になる(self, started_room: Room) -> None:
+    def test_読み切ると_readingended_になる(self, started_room: Room) -> None:
+        """読み切っただけでは締め切らない。まだ押せる。"""
         assert started_room.reading_ended(started_room.round_id) is True
-        assert started_room.phase == "timeUp"
+        assert started_room.phase == "readingEnded"
+
+    def test_読み切った後も早押しできる(self, started_room: Room) -> None:
+        """読み切ってから数秒は押させるのが通例のため。"""
+        player_id = next(iter(started_room.players))
+        started_room.reading_ended(started_room.round_id)
+
+        result = started_room.buzz(player_id, started_room.round_id)
+
+        assert result.accepted is True
+        assert started_room.phase == "buzzed"
 
     def test_古いラウンドなら無視する(self, started_room: Room) -> None:
         assert started_room.reading_ended(started_room.round_id - 1) is False
@@ -246,10 +265,53 @@ class TestReadingEnded:
         assert started_room.phase == "buzzed"
 
 
+class TestTimeUp:
+    def test_締め切ると_timeup_になる(self, started_room: Room) -> None:
+        started_room.reading_ended(started_room.round_id)
+
+        assert started_room.time_up(started_room.round_id) is True
+        assert started_room.phase == "timeUp"
+
+    def test_締め切ると押せなくなる(self, started_room: Room) -> None:
+        player_id = next(iter(started_room.players))
+        started_room.reading_ended(started_room.round_id)
+        started_room.time_up(started_room.round_id)
+
+        assert started_room.buzz(player_id, started_room.round_id).reason == "wrong_phase"
+
+    def test_読み切る前は締め切れない(self, started_room: Room) -> None:
+        assert started_room.time_up(started_room.round_id) is False
+        assert started_room.phase == "reading"
+
+    def test_古いラウンドなら無視する(self, started_room: Room) -> None:
+        started_room.reading_ended(started_room.round_id)
+
+        assert started_room.time_up(started_room.round_id - 1) is False
+
+
+class TestCheck:
+    def test_buzzed_から_check_へ進める(self, started_room: Room) -> None:
+        player_id = next(iter(started_room.players))
+        started_room.buzz(player_id, started_room.round_id)
+
+        assert started_room.check(started_room.round_id) is True
+        assert started_room.phase == "check"
+
+    def test_押されていなければ_check_できない(self, started_room: Room) -> None:
+        assert started_room.check(started_room.round_id) is False
+
+    def test_古いラウンドなら無視する(self, started_room: Room) -> None:
+        player_id = next(iter(started_room.players))
+        started_room.buzz(player_id, started_room.round_id)
+
+        assert started_room.check(started_room.round_id - 1) is False
+
+
 class TestJudge:
     def test_正解で_result_になる(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
+        started_room.check(started_room.round_id)
 
         assert started_room.judge(started_room.round_id, correct=True) is True
         assert started_room.phase == "result"
@@ -260,6 +322,7 @@ class TestJudge:
     def test_誤答するとお手つきになる(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
+        started_room.check(started_room.round_id)
         started_room.judge(started_room.round_id, correct=False)
 
         assert started_room.players[player_id].locked_out is True
@@ -267,22 +330,31 @@ class TestJudge:
     def test_正解ならお手つきにしない(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
+        started_room.check(started_room.round_id)
         started_room.judge(started_room.round_id, correct=True)
 
         assert started_room.players[player_id].locked_out is False
 
-    def test_読み切りからでも判定できる(self, started_room: Room) -> None:
+    def test_締め切り後は回答者なしで判定できる(self, started_room: Room) -> None:
+        """誰も押さずに締め切った場合。判定対象の回答者が居ない。"""
         started_room.reading_ended(started_room.round_id)
+        started_room.time_up(started_room.round_id)
 
         assert started_room.judge(started_room.round_id, correct=False) is True
         assert started_room.phase == "result"
+        assert started_room.judgement is None
 
-    def test_reading_中は判定できない(self, started_room: Room) -> None:
+    @pytest.mark.parametrize("phase", ["reading", "readingEnded", "buzzed"])
+    def test_check_の前は判定できない(self, started_room: Room, phase: str) -> None:
+        """正解を確認する前に判定させない。"""
+        started_room.phase = phase  # type: ignore[assignment]
+
         assert started_room.judge(started_room.round_id, correct=True) is False
 
     def test_古いラウンドなら無視する(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
+        started_room.check(started_room.round_id)
 
         assert started_room.judge(started_room.round_id - 1, correct=True) is False
 
@@ -292,7 +364,6 @@ class TestRelease:
         question = started_room.question
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
-        started_room.judge(started_room.round_id, correct=False)
 
         assert started_room.release(started_room.round_id) is True
         assert started_room.phase == "reading"
@@ -300,14 +371,26 @@ class TestRelease:
         assert started_room.buzzed is None
         assert started_room.judgement is None
 
-    def test_解除してもお手つきは残る(self, started_room: Room) -> None:
-        """誤答した人を弾いたまま、他の人に回答権を与えるため。"""
+    def test_解除ではお手つきにしない(self, started_room: Room) -> None:
+        """押し間違いの取り消しなので、判定を経ていない人を罰しない。"""
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
-        started_room.judge(started_room.round_id, correct=False)
         started_room.release(started_room.round_id)
 
-        assert started_room.players[player_id].locked_out is True
+        assert started_room.players[player_id].locked_out is False
+
+    def test_解除した本人がまた押せる(self, started_room: Room) -> None:
+        player_id = next(iter(started_room.players))
+        started_room.buzz(player_id, started_room.round_id)
+        started_room.release(started_room.round_id)
+
+        assert started_room.buzz(player_id, started_room.round_id).accepted is True
+
+    @pytest.mark.parametrize("phase", ["reading", "readingEnded", "check", "timeUp", "result"])
+    def test_buzzed_以外からは解除できない(self, started_room: Room, phase: str) -> None:
+        started_room.phase = phase  # type: ignore[assignment]
+
+        assert started_room.release(started_room.round_id) is False
 
     def test_古いラウンドなら無視する(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
@@ -327,6 +410,7 @@ class TestNextQuestion:
     def test_お手つきが解除される(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
+        started_room.check(started_room.round_id)
         started_room.judge(started_room.round_id, correct=False)
         started_room.next_question()
 
@@ -335,6 +419,7 @@ class TestNextQuestion:
     def test_出題し直してもお手つきは解除される(self, started_room: Room) -> None:
         player_id = next(iter(started_room.players))
         started_room.buzz(player_id, started_room.round_id)
+        started_room.check(started_room.round_id)
         started_room.judge(started_room.round_id, correct=False)
         started_room.start_question()
 
@@ -342,12 +427,41 @@ class TestNextQuestion:
 
 
 class TestStateMessage:
-    def test_出題者には問題文と正解を送る(self, started_room: Room) -> None:
+    def test_出題者には問題文を送る(self, started_room: Room) -> None:
         message = started_room.to_state_message(for_host=True)
 
         assert message.question is not None
         assert message.question.text.startswith("問題")
-        assert message.question.answers
+
+    @pytest.mark.parametrize("phase", ["reading", "readingEnded", "buzzed"])
+    def test_判定前は出題者にも正解を送らない(self, started_room: Room, phase: str) -> None:
+        """投影は参加者も見るので、正解が出ていると読んで答えられてしまう。
+
+        表示するかどうかをフロントに委ねず、送らないことで担保する。
+        """
+        started_room.phase = phase  # type: ignore[assignment]
+
+        message = started_room.to_state_message(for_host=True)
+
+        assert message.question is not None
+        assert message.question.answers is None
+
+    @pytest.mark.parametrize("phase", ["check", "timeUp", "result"])
+    def test_正解を確認する段になったら送る(self, started_room: Room, phase: str) -> None:
+        started_room.phase = phase  # type: ignore[assignment]
+
+        message = started_room.to_state_message(for_host=True)
+
+        assert started_room.question is not None
+        assert message.question is not None
+        assert message.question.answers == started_room.question.answers
+
+    def test_回答者には_check_でも正解を送らない(self, started_room: Room) -> None:
+        started_room.phase = "check"
+
+        message = started_room.to_state_message(for_host=False)
+
+        assert message.question is None
 
     def test_回答者には問題を送らない(self, started_room: Room) -> None:
         """音声より先に問題文が読めると早押しの意味が無くなる。"""

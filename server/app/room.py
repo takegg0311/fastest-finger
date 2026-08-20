@@ -1,12 +1,25 @@
 """ルームの状態機械。早押し判定の本体。
 
-    idle ──start_question──▶ reading ──buzz──▶ buzzed ──judge──▶ result ──next──▶ idle
-                                │  ▲              │
-                          reading_ended           └─release（お手つき解除）
-                                ▼  └──────────────┘
-                             timeUp ──judge──▶ result
+    idle ──start_question──▶ reading ──audio終了──▶ readingEnded ──time_up──▶ timeUp
+                                │ buzz                  │ buzz                   │
+                                ▼    ┌──────────────────┘                        │
+                             buzzed ─┤                                           │
+                                │    └─release（押し間違いの取り消し）─▶ reading │
+                              check                                              │
+                                ▼                                                ▼
+                             check ──judge──▶ result ◀───────── judge ───────────┘
+                                                 │
+                                               next ──▶ idle
 
-サーバの phase は「早押しを受け付けてよいか」を決めるためだけに存在する。
+早押しを受け付けるのは reading と readingEnded。音声を読み切っても
+締め切らないのは、読み切ってから数秒は押させるのが通例のため。
+締め切るのは出題者が time_up を押したときだけ。
+
+正解を投影に出してよいのは check / timeUp / result だけ。投影は参加者も
+見るので、buzzed の時点で正解が出ていると、それを読んで答えられてしまう。
+
+サーバの phase は「早押しを受け付けてよいか」「正解を出してよいか」を
+決めるためだけに存在する。
 PoC の loading / jingle に当たるものは持たない。前者はクライアント都合、
 後者は出題者フロントのローカル演出であり、混ぜると排他ロジックが読めなくなる。
 
@@ -32,6 +45,10 @@ from .quiz import Question, pick_random
 
 # 投影画面のレイアウトが崩れない範囲に切る
 MAX_NAME_LENGTH = 12
+
+# 正解を投影に出してよい phase。投影は参加者も見るため、
+# それ以外では出題者フロントにも正解を送らない。
+ANSWER_VISIBLE_PHASES: frozenset[str] = frozenset({"check", "timeUp", "result"})
 
 
 @dataclass
@@ -194,7 +211,8 @@ class Room:
         if self.buzzed is not None:
             return BuzzResult(accepted=False, reason="too_late")
 
-        if self.phase != "reading":
+        # 読み切った後（readingEnded）も受け付ける。締め切りは time_up。
+        if self.phase not in ("reading", "readingEnded"):
             return BuzzResult(accepted=False, reason="wrong_phase")
 
         player = self.players.get(player_id)
@@ -211,18 +229,37 @@ class Room:
         return BuzzResult(accepted=True, player=player)
 
     def reading_ended(self, round_id: int) -> bool:
-        """押されないまま読み切った。"""
+        """問題音声を読み切った。まだ早押しは受け付ける。
+
+        締め切るのは出題者が time_up を押したとき。読み切ってすぐ締め切ると、
+        考えてから押す間が無くなる。
+        """
         if round_id != self.round_id or self.phase != "reading":
+            return False
+        self.phase = "readingEnded"
+        return True
+
+    def time_up(self, round_id: int) -> bool:
+        """出題者が回答の受付を締め切る。誰も押さなかったのでスルー。"""
+        if round_id != self.round_id or self.phase != "readingEnded":
             return False
         self.phase = "timeUp"
         return True
 
-    def judge(self, round_id: int, correct: bool) -> bool:
-        """出題者が正誤を判定する。
+    def check(self, round_id: int) -> bool:
+        """回答を聞き終えたので正解を確認する。ここで正解が投影に出る。"""
+        if round_id != self.round_id or self.phase != "buzzed":
+            return False
+        self.phase = "check"
+        return True
 
-        誤答なら当該回答者をお手つきにする。release で同じ問題を再開できる。
+    def judge(self, round_id: int, correct: bool) -> bool:
+        """出題者が正誤を判定する。正解を確認した後（check）に押す。
+
+        誤答でもその問題は終わり、result へ進む。同じ問題で 2 人目の buzz を
+        受け付ける運用（ダブルチャンス）は行わない方針。
         """
-        if round_id != self.round_id or self.phase not in ("buzzed", "timeUp"):
+        if round_id != self.round_id or self.phase not in ("check", "timeUp"):
             return False
 
         if self.buzzed is not None:
@@ -241,8 +278,12 @@ class Room:
         return True
 
     def release(self, round_id: int) -> bool:
-        """お手つき解除。誤答者を弾いたまま同じ問題の続きを再開する。"""
-        if round_id != self.round_id or self.phase not in ("buzzed", "result"):
+        """回答権を取り消して問題を続ける。
+
+        誤って押してしまった事故の逃げ口として buzzed からのみ使う。
+        判定を経ないので locked_out にはしない。
+        """
+        if round_id != self.round_id or self.phase != "buzzed":
             return False
         if self.question is None:
             return False
@@ -278,7 +319,14 @@ class Room:
                 text=self.question.text,
                 audio_url=self.question.audio_url(),
                 lab_url=self.question.lab_url(),
-                answers=self.question.answers,
+                # 正解は投影に出してよい phase でのみ載せる。
+                # 出題者フロントに渡した時点で投影に映りうるので、
+                # 表示するかどうかの判断をフロントに委ねず、ここで落とす。
+                answers=(
+                    self.question.answers
+                    if self.phase in ANSWER_VISIBLE_PHASES
+                    else None
+                ),
             )
 
         buzzed_view: BuzzedView | None = None

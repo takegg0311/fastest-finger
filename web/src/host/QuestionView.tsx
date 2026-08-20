@@ -6,8 +6,8 @@ type Props = {
   text: string;
   /** 停止後に全文を見せる場合の全文。表示しないときは null */
   fullText: string | null;
-  /** 出題者の手元で確認する正解。表示しないときは空 */
-  answers: string[];
+  /** 正解。まだ出してよい phase でないときは null */
+  answers: string[] | null;
   judgement: JudgementView | null;
 };
 
@@ -23,7 +23,7 @@ export function QuestionView({ text, fullText, answers, judgement }: Props) {
         <p className="question-full">{fullText}</p>
       )}
 
-      {answers.length > 0 && (
+      {answers !== null && answers.length > 0 && (
         <p className="question-answer">
           <span className="question-answer-label">正解</span>
           {answers.join(' / ')}

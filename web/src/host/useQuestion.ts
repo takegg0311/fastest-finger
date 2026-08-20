@@ -11,11 +11,16 @@ import { buildAlignment, type Alignment } from '../lib/align';
 import { parseLab } from '../lib/lab';
 import type { QuestionView } from '../protocol';
 
+/**
+ * .lab を解析して組み立てた、文字送りに必要な一式。
+ *
+ * answers は含めない。正解は phase によって送られたり送られなかったりし、
+ * .lab の再取得とは無関係に変わるため、room_state から直接読む。
+ */
 export type LoadedQuestion = {
   id: string;
   text: string;
   audioUrl: string;
-  answers: string[];
   alignment: Alignment;
 };
 
@@ -46,7 +51,6 @@ export function useQuestion(question: QuestionView | null): LoadedQuestion | nul
           id: question.id,
           text,
           audioUrl: question.audio_url,
-          answers: question.answers,
           alignment: buildAlignment(text, lab),
         });
       } catch (reason: unknown) {
@@ -59,7 +63,6 @@ export function useQuestion(question: QuestionView | null): LoadedQuestion | nul
           id: question.id,
           text,
           audioUrl: question.audio_url,
-          answers: question.answers,
           alignment: { text, chunks: [] },
         });
       }

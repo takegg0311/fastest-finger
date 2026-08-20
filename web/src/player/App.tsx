@@ -115,7 +115,9 @@ export function App() {
   const canBuzz =
     status === 'open' &&
     state !== null &&
-    state.phase === 'reading' &&
+    // 読み切った後（readingEnded）も締め切られるまで押せる。
+    // サーバ側の Room.buzz が受け付ける phase と揃えること
+    (state.phase === 'reading' || state.phase === 'readingEnded') &&
     !pressed &&
     me?.locked_out !== true;
 
