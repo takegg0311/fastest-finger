@@ -20,6 +20,8 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .quiz import QUIZ_DATA_DIR, REPO_ROOT, QuizDataError, Question, load_questions
+from .room import Room
+from .ws import ConnectionManager, router as ws_router
 
 WEB_DIST_DIR = REPO_ROOT / "web" / "dist"
 
@@ -85,6 +87,11 @@ def _current_port() -> int:
 app = FastAPI(title="fastest-finger", lifespan=lifespan)
 app.state.questions = _load_questions_or_exit()
 app.state.host_token = HOST_TOKEN
+# ルーム状態はプロセス内のメモリに持つ。--workers は 1 固定であること
+app.state.room = Room(questions=app.state.questions)
+app.state.connections = ConnectionManager()
+
+app.include_router(ws_router)
 
 
 @app.get("/api/questions")

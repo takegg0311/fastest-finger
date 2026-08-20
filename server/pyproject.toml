@@ -13,10 +13,13 @@ dependencies = [
 dev = [
     "pytest>=8.3",
     "httpx>=0.28",
+    "pytest-timeout>=2.4.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# WebSocket のテストは受信待ちで固まりうるので、既定でタイムアウトさせる
+timeout = 15
 
 [tool.uv]
 package = false
