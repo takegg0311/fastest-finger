@@ -54,9 +54,23 @@ type Entry = {
  * （日付）を指定する運用とし、`{batch}/{seq}-{batch}.{ext}` を期待する。
  * 接尾語がフォルダ名と一致することで、別バッチのファイルを取り違えて
  * 置いた場合にファイルが見つからず検出できる。
+ *
+ * 連番は width 桁までゼロ埋めする（`00-20260821.wav` など）。桁数は
+ * バッチ内の出力数で決まるため、呼び出し側が seqWidth で求めて渡す。
  */
-function questionFilePath(batch: string, seq: number, ext: string): string {
-  return `${batch}/${seq}-${batch}${ext}`;
+function questionFilePath(batch: string, seq: number, ext: string, width = 1): string {
+  return `${batch}/${String(seq).padStart(width, '0')}-${batch}${ext}`;
+}
+
+/**
+ * 出力数から、連番のゼロ埋め桁数を求める。
+ *
+ * VOICEPEAK は同じ接尾語で出力したファイル数に応じて連番をゼロ埋めする。
+ * 10 個以上なら 2 桁、100 個以上なら 3 桁。境界は連番の値ではなく出力数で
+ * 決まるため、9 個（0〜8）は 1 桁、10 個（00〜09）は 2 桁になる。
+ */
+function seqWidth(count: number): number {
+  return String(Math.max(count, 1)).length;
 }
 
 /**
@@ -162,7 +176,12 @@ function toAnswers(row: Row): string[] {
  * 1 行を検証して Entry にする。
  * 問題があれば errors へ理由を積み、undefined を返す。
  */
-function toEntry(row: Row, lineNumber: number, errors: string[]): Entry | undefined {
+function toEntry(
+  row: Row,
+  lineNumber: number,
+  errors: string[],
+  width: number,
+): Entry | undefined {
   const label = `${lineNumber} 行目`;
   const before = errors.length;
 
@@ -187,7 +206,7 @@ function toEntry(row: Row, lineNumber: number, errors: string[]): Entry | undefi
   const paths = {} as Record<(typeof REQUIRED_EXTENSIONS)[number], string>;
 
   for (const ext of REQUIRED_EXTENSIONS) {
-    const relativePath = questionFilePath(row.batch, seq, ext);
+    const relativePath = questionFilePath(row.batch, seq, ext, width);
     if (!existsSync(join(quizDataDir, relativePath))) {
       errors.push(`${label} (${id}): ${relativePath} が見つかりません。`);
       continue;
@@ -237,10 +256,24 @@ function buildManifest(): Entry[] {
   const entries: Entry[] = [];
   const seenIds = new Map<string, number>();
 
+  // ファイル名のゼロ埋め桁数はバッチ内の出力数で決まるため、行ごとの検証に入る前に
+  // バッチごとの連番の最大値を集める。不正な値はここでは弾かず toEntry が報告する。
+  const maxSeq = new Map<string, number>();
+  for (const row of rows) {
+    const seq = Number(row.seq);
+    if (row.seq === '' || !Number.isInteger(seq) || seq < 0) continue;
+    if (seq > (maxSeq.get(row.batch) ?? -1)) maxSeq.set(row.batch, seq);
+  }
+
+  // 連番は 0 起点なので、出力数は最大値 + 1。
+  // CSV の行数を使わないのは、行を削っても実ファイル名の桁数は変わらないため。
+  const widths = new Map<string, number>();
+  for (const [batch, largest] of maxSeq) widths.set(batch, seqWidth(largest + 1));
+
   rows.forEach((row, index) => {
     // ヘッダ行があるため、CSV 上の行番号は +2
     const lineNumber = index + 2;
-    const entry = toEntry(row, lineNumber, errors);
+    const entry = toEntry(row, lineNumber, errors, widths.get(row.batch) ?? 1);
     if (entry === undefined) return;
 
     const duplicatedAt = seenIds.get(entry.id);
