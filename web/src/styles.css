@@ -1,0 +1,175 @@
+/* 出題者用（投影）と回答者用（スマホ）で共通のスタイル */
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #e3b341;
+  --correct: #3fb950;
+  --wrong: #f85149;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------- 回答者用 */
+
+.player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  height: 100%;
+  padding: 1.5rem 1rem;
+  /* 押した指でページが動かないようにする */
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.player-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.player-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.player-status {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.buzz-button {
+  flex: 1;
+  width: min(100%, 22rem);
+  border: none;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  max-height: 22rem;
+  background: var(--wrong);
+  color: #fff;
+  font-size: clamp(2rem, 12vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  box-shadow: 0 0.75rem 0 #8b2d28;
+  cursor: pointer;
+  transition: transform 60ms ease, box-shadow 60ms ease;
+}
+
+.buzz-button:active:not(:disabled) {
+  transform: translateY(0.6rem);
+  box-shadow: 0 0.15rem 0 #8b2d28;
+}
+
+.buzz-button:disabled {
+  background: #30363d;
+  color: var(--muted);
+  box-shadow: 0 0.75rem 0 #21262d;
+  cursor: default;
+}
+
+.buzz-button-label {
+  pointer-events: none;
+}
+
+.answer-right {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: min(100%, 22rem);
+  border: 3px solid var(--accent);
+  border-radius: 1rem;
+  background: rgba(227, 179, 65, 0.12);
+}
+
+.answer-right-label {
+  margin: 0;
+  color: var(--accent);
+  font-size: clamp(2.5rem, 15vw, 4rem);
+  font-weight: 800;
+}
+
+.answer-right-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(100%, 20rem);
+  margin: auto;
+}
+
+.name-form-label {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.name-form-input {
+  padding: 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  /* iOS で拡大されないよう 16px 以上にする */
+  font-size: 1.125rem;
+}
+
+.name-form-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.name-form-submit {
+  padding: 0.85rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: #1c1c1c;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.name-form-submit:disabled {
+  background: #30363d;
+  color: var(--muted);
+  cursor: default;
+}
