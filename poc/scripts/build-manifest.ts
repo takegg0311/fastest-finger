@@ -1,5 +1,5 @@
 /**
- * public/quiz_data/questions.csv を読み、問題一覧 manifest.json を生成する。
+ * quiz_data/questions.csv を読み、問題一覧 manifest.json を生成する。
  *
  * PoC はバックエンドを持たないため、ブラウザからディレクトリ一覧や CSV を
  * 解決できない。代わりにビルド前へこのスクリプトを挟み、CSV と VOICEPEAK の
@@ -8,13 +8,17 @@
  * 音声ファイルは VOICEPEAK が出力したまま `{batch}/{seq}.{ext}` に置く。
  * VOICEPEAK は連番を 0 起点でしか振れず接頭語も付けられないため、
  * バッチ（日付）フォルダと連番の組で一意性を与えている。
+ *
+ * quiz_data はリポジトリルートに置き、オンライン版と共有している。
+ * PoC からは poc/public/quiz_data のシンボリックリンク経由で配信されるが、
+ * このスクリプトは実体を直接読み書きする。
  */
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const projectRoot = fileURLToPath(new URL('..', import.meta.url));
-const quizDataDir = join(projectRoot, 'public', 'quiz_data');
+const repoRoot = fileURLToPath(new URL('../..', import.meta.url));
+const quizDataDir = join(repoRoot, 'quiz_data');
 const csvPath = join(quizDataDir, 'questions.csv');
 const manifestPath = join(quizDataDir, 'manifest.json');
 

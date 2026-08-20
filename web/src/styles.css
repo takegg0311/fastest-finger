@@ -1,0 +1,435 @@
+/* 出題者用（投影）と回答者用（スマホ）で共通のスタイル */
+
+:root {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --border: #30363d;
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --accent: #e3b341;
+  --correct: #3fb950;
+  --wrong: #f85149;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, 'Hiragino Sans', 'Noto Sans JP', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+.notice {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------- 回答者用 */
+
+.player {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  height: 100%;
+  padding: 1.5rem 1rem;
+  /* 押した指でページが動かないようにする */
+  touch-action: manipulation;
+  user-select: none;
+}
+
+.player-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+.player-name {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.player-status {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.buzz-button {
+  flex: 1;
+  width: min(100%, 22rem);
+  border: none;
+  border-radius: 50%;
+  aspect-ratio: 1;
+  max-height: 22rem;
+  background: var(--wrong);
+  color: #fff;
+  font-size: clamp(2rem, 12vw, 3.5rem);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  box-shadow: 0 0.75rem 0 #8b2d28;
+  cursor: pointer;
+  transition: transform 60ms ease, box-shadow 60ms ease;
+}
+
+.buzz-button:active:not(:disabled) {
+  transform: translateY(0.6rem);
+  box-shadow: 0 0.15rem 0 #8b2d28;
+}
+
+.buzz-button:disabled {
+  background: #30363d;
+  color: var(--muted);
+  box-shadow: 0 0.75rem 0 #21262d;
+  cursor: default;
+}
+
+.buzz-button-label {
+  pointer-events: none;
+}
+
+.answer-right {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: min(100%, 22rem);
+  border: 3px solid var(--accent);
+  border-radius: 1rem;
+  background: rgba(227, 179, 65, 0.12);
+}
+
+.answer-right-label {
+  margin: 0;
+  color: var(--accent);
+  font-size: clamp(2.5rem, 15vw, 4rem);
+  font-weight: 800;
+}
+
+.answer-right-note {
+  margin: 0;
+  color: var(--muted);
+}
+
+.name-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: min(100%, 20rem);
+  margin: auto;
+}
+
+.name-form-label {
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.name-form-input {
+  padding: 0.75rem;
+  border: 2px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  color: var(--text);
+  /* iOS で拡大されないよう 16px 以上にする */
+  font-size: 1.125rem;
+}
+
+.name-form-input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+
+.name-form-submit {
+  padding: 0.85rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: #1c1c1c;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.name-form-submit:disabled {
+  background: #30363d;
+  color: var(--muted);
+  cursor: default;
+}
+
+/* ---------------------------------------------------------- 出題者用 */
+
+/* スクリーン投影を想定し、文字を大きく取る */
+.host {
+  display: grid;
+  grid-template-columns: 1fr 20rem;
+  grid-template-rows: 1fr auto;
+  grid-template-areas:
+    'stage side'
+    'controls controls';
+  gap: 1.5rem;
+  height: 100%;
+  padding: 2rem;
+}
+
+.host-stage {
+  grid-area: stage;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1.5rem;
+  min-width: 0;
+}
+
+.host-side {
+  grid-area: side;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-height: 0;
+}
+
+.host-controls {
+  grid-area: controls;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.host-error {
+  margin: 0;
+  color: var(--wrong);
+}
+
+/* 回答権を得た人。投影の主役なので大きく出す */
+.buzzed-banner {
+  padding: 1.5rem 2rem;
+  border: 4px solid var(--accent);
+  border-radius: 1rem;
+  background: rgba(227, 179, 65, 0.15);
+  text-align: center;
+}
+
+.buzzed-name {
+  font-size: clamp(2.5rem, 7vw, 5rem);
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.question {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  background: var(--surface);
+}
+
+.question-text {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.5vw, 3rem);
+  font-weight: 700;
+  line-height: 1.6;
+  /* 読み上げに追従して伸びるので、高さの揺れを抑える */
+  min-height: 1.6em;
+}
+
+.question-caret {
+  display: inline-block;
+  width: 0.08em;
+  height: 1em;
+  margin-left: 0.05em;
+  background: var(--accent);
+  vertical-align: text-bottom;
+}
+
+/* 停止後に見せる全文。読み上げ済みの部分と区別する */
+.question-full {
+  margin: 0;
+  color: var(--muted);
+  font-size: clamp(1rem, 1.5vw, 1.25rem);
+  line-height: 1.7;
+}
+
+.question-answer {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: clamp(1.25rem, 2.5vw, 2rem);
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.question-answer-label {
+  padding: 0.15em 0.6em;
+  border-radius: 0.35rem;
+  background: var(--accent);
+  color: #1c1c1c;
+  font-size: 0.6em;
+}
+
+.judgement {
+  margin: 0;
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  font-weight: 800;
+}
+
+.judgement.correct {
+  color: var(--correct);
+}
+
+.judgement.wrong {
+  color: var(--wrong);
+}
+
+.join-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--surface);
+}
+
+.join-panel-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.join-panel-qr {
+  width: 100%;
+  max-width: 12rem;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.join-panel-url {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  word-break: break-all;
+  text-align: center;
+}
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.player-list-empty {
+  margin: 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.player-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--surface);
+  font-size: 1.05rem;
+}
+
+.player-item.buzzed {
+  border-color: var(--accent);
+  background: rgba(227, 179, 65, 0.15);
+  font-weight: 700;
+}
+
+.player-item.offline,
+.player-item.locked {
+  color: var(--muted);
+}
+
+.player-item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-item-tag {
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.25rem;
+  background: var(--border);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.control-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1rem;
+}
+
+.control {
+  padding: 1rem 2.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.control:hover {
+  border-color: var(--muted);
+}
+
+.control.primary {
+  border-color: transparent;
+  background: var(--accent);
+  color: #1c1c1c;
+}
+
+.control.correct {
+  border-color: transparent;
+  background: var(--correct);
+  color: #0d1117;
+}
+
+.control.wrong {
+  border-color: transparent;
+  background: var(--wrong);
+  color: #fff;
+}
+
+.control-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.1rem;
+}
