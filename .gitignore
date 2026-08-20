@@ -14,9 +14,9 @@ quiz_data/*
 !quiz_data/questions_example.csv
 !quiz_data/20260820/
 quiz_data/20260820/*
-!quiz_data/20260820/0.lab
-!quiz_data/20260820/0.txt
-!quiz_data/20260820/0.wav
+!quiz_data/20260820/0-20260820.lab
+!quiz_data/20260820/0-20260820.txt
+!quiz_data/20260820/0-20260820.wav
 
 # 上記データから生成されるため追跡しない
 quiz_data/manifest.json

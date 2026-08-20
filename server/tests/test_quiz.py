@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.quiz import QuizDataError, load_questions, pick_random
+from app.quiz import QuizDataError, load_questions, pick_random, question_file_path
 
 HEADER = "batch,seq,text,answer,alt_answers\n"
 
@@ -19,7 +19,7 @@ def write_quiz_data(
 ) -> Path:
     """検証用の quiz_data ディレクトリを組み立てる。
 
-    files は `{batch}/{seq}.txt` -> 中身 の対応。指定がなければ CSV の
+    files は `{batch}/{seq}-{batch}.txt` -> 中身 の対応。指定がなければ CSV の
     text をそのまま .txt に書き、wav / lab は空ファイルで用意する。
     """
     (directory / "questions.csv").write_text(HEADER + csv_body, encoding="utf-8")
@@ -34,12 +34,17 @@ def write_quiz_data(
 
 
 def make_question_files(directory: Path, batch: str, seq: int, text: str) -> None:
-    """1 問分の wav / txt / lab を用意する。"""
-    batch_dir = directory / batch
-    batch_dir.mkdir(parents=True, exist_ok=True)
-    (batch_dir / f"{seq}.txt").write_text(text, encoding="utf-8")
-    (batch_dir / f"{seq}.wav").write_bytes(b"")
-    (batch_dir / f"{seq}.lab").write_text("0 1000000 pau\n", encoding="utf-8")
+    """1 問分の wav / txt / lab を用意する。
+
+    ファイル名の組み立ては本番と同じ question_file_path に委ね、
+    テスト側に命名規則を二重に書かない。
+    """
+    (directory / batch).mkdir(parents=True, exist_ok=True)
+    (directory / question_file_path(batch, seq, ".txt")).write_text(text, encoding="utf-8")
+    (directory / question_file_path(batch, seq, ".wav")).write_bytes(b"")
+    (directory / question_file_path(batch, seq, ".lab")).write_text(
+        "0 1000000 pau\n", encoding="utf-8"
+    )
 
 
 def test_正常な_csv_を読み込める(tmp_path: Path) -> None:
@@ -55,8 +60,8 @@ def test_正常な_csv_を読み込める(tmp_path: Path) -> None:
     assert question.seq == 0
     assert question.text == "日本の首都はどこ？"
     assert question.answers == ["東京", "とうきょう"]
-    assert question.audio_url() == "/quiz_data/20260820/0.wav"
-    assert question.lab_url() == "/quiz_data/20260820/0.lab"
+    assert question.audio_url() == "/quiz_data/20260820/0-20260820.wav"
+    assert question.lab_url() == "/quiz_data/20260820/0-20260820.lab"
 
 
 def test_問題文に_カンマ_を含められる(tmp_path: Path) -> None:
@@ -126,7 +131,7 @@ def test_問題文に改行があればエラー(tmp_path: Path) -> None:
 def test_音声ファイルが無ければエラー(tmp_path: Path) -> None:
     write_quiz_data(tmp_path, "20260820,0,問題,答え,\n")
 
-    with pytest.raises(QuizDataError, match=r"20260820/0\.wav が見つかりません"):
+    with pytest.raises(QuizDataError, match=r"20260820/0-20260820\.wav が見つかりません"):
         load_questions(tmp_path)
 
 
@@ -135,7 +140,7 @@ def test_txt_と一致しなければエラー(tmp_path: Path) -> None:
     make_question_files(tmp_path, "20260820", 0, "音声側の問題文")
     write_quiz_data(tmp_path, "20260820,0,CSV側の問題文,答え,\n")
 
-    with pytest.raises(QuizDataError, match="text が 20260820/0.txt と一致しません"):
+    with pytest.raises(QuizDataError, match="text が 20260820/0-20260820.txt と一致しません"):
         load_questions(tmp_path)
 
 

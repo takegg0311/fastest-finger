@@ -33,7 +33,7 @@ export type Question = {
   alignment: Alignment;
 };
 
-/** manifest の相対パス（`{batch}/{seq}.{ext}`）を URL にする */
+/** manifest の相対パス（`{batch}/{seq}-{batch}.{ext}`）を URL にする */
 function encodePath(relativePath: string): string {
   const encoded = relativePath.split('/').map(encodeURIComponent).join('/');
   return `${QUIZ_DATA_DIR}/${encoded}`;

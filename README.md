@@ -47,7 +47,7 @@ npm workspaces 構成のため、リポジトリルートで実行する。
 各自でローカルに配置する。
 
 ただしデータ形式のサンプルとして、`questions_example.csv` と
-対応する 1 問分の音声（`20260820/0.wav` / `.txt` / `.lab`）のみ追跡している。
+対応する 1 問分の音声（`20260820/0-20260820.wav` / `.txt` / `.lab`）のみ追跡している。
 `questions_example.csv` を `questions.csv` にコピーすれば、この 1 問で動作する。
 
 ```bash
@@ -64,8 +64,8 @@ quiz_data/
 ├── questions_example.csv   ← サンプル（追跡対象）
 ├── questions.csv           ← 実データ（各自で用意）
 └── 20260820/          ← バッチ = VOICEPEAK プロジェクト 1 つ
-    ├── 0.wav / 0.txt / 0.lab
-    └── 1.wav / 1.txt / 1.lab
+    ├── 0-20260820.wav / .txt / .lab
+    └── 1-20260820.wav / .txt / .lab
 ```
 
 `questions.csv` は 5 列。
@@ -79,7 +79,7 @@ batch,seq,text,answer,alt_answers
 | 列 | 内容 |
 | --- | --- |
 | `batch` | バッチ名（`YYYYMMDD`）。`quiz_data/{batch}/` に対応 |
-| `seq` | VOICEPEAK が出力した連番（0 起点）。`{seq}.wav` などに対応 |
+| `seq` | VOICEPEAK が出力した連番（0 起点）。`{seq}-{batch}.wav` などに対応 |
 | `text` | 問題文。**改行を含めない**（1 問 1 ブロック） |
 | `answer` | 正解 |
 | `alt_answers` | 別解。`\|` 区切りで複数指定可。無ければ空 |
@@ -87,11 +87,17 @@ batch,seq,text,answer,alt_answers
 VOICEPEAK は連番を 0 起点でしか振れず接頭語も付けられないため、
 バッチフォルダと連番の組で一意性を与えている。
 
+ファイル名が `{seq}-{batch}` となっているのは、VOICEPEAK が連番だけの出力を
+許さず接尾語が必須のため。接尾語にはバッチ名（日付）をそのまま指定する。
+フォルダ名と接尾語が一致するので、別の日のファイルを取り違えて置いた場合に
+参照先が見つからず検出できる。
+
 #### 問題を追加する手順
 
 1. `questions.csv` の `text` 列を表計算ソフトでまとめて選択し、VOICEPEAK に貼り付ける
    （改行がそのままブロック分割になる）
-2. `quiz_data/{バッチ名}/` へ連番出力する（接尾語なし）
+2. `quiz_data/{バッチ名}/` へ連番出力する。**接尾語にはバッチ名（日付）を指定する**
+   （`0-20260820.wav` のようになる）
 3. `npm run manifest -w poc` を実行する
 
 CSV の `text` と出力された `.txt` の中身が一致しない場合、
