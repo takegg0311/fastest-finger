@@ -30,6 +30,17 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 QUIZ_DATA_DIR = REPO_ROOT / "quiz_data"
 
 
+def question_file_path(batch: str, seq: int, ext: str) -> str:
+    """1 問分のファイルの、quiz_data からの相対パスを組み立てる。
+
+    VOICEPEAK は連番だけの出力ができず接尾語が必須のため、接尾語にバッチ名
+    （日付）を指定する運用とし、`{batch}/{seq}-{batch}.{ext}` を期待する。
+    接尾語がフォルダ名と一致することで、別バッチのファイルを取り違えて
+    置いた場合にファイルが見つからず検出できる。
+    """
+    return f"{batch}/{seq}-{batch}{ext}"
+
+
 class QuizDataError(Exception):
     """questions.csv の内容に問題がある。起動を止めるために送出する。"""
 
@@ -108,7 +119,7 @@ def _validate_row(row: dict[str, str], line_number: int, quiz_data_dir: Path) ->
     paths: dict[str, str] = {}
 
     for ext in REQUIRED_EXTENSIONS:
-        relative_path = f"{row['batch']}/{seq}{ext}"
+        relative_path = question_file_path(row["batch"], seq, ext)
         if not (quiz_data_dir / relative_path).exists():
             result.messages.append(f"{label} ({question_id}): {relative_path} が見つかりません。")
             continue

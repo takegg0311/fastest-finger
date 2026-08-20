@@ -5,7 +5,7 @@
  * 解決できない。代わりにビルド前へこのスクリプトを挟み、CSV と VOICEPEAK の
  * 出力ファイルを突き合わせた結果を manifest.json として書き出す。
  *
- * 音声ファイルは VOICEPEAK が出力したまま `{batch}/{seq}.{ext}` に置く。
+ * 音声ファイルは VOICEPEAK が出力したまま `{batch}/{seq}-{batch}.{ext}` に置く。
  * VOICEPEAK は連番を 0 起点でしか振れず接頭語も付けられないため、
  * バッチ（日付）フォルダと連番の組で一意性を与えている。
  *
@@ -46,6 +46,18 @@ type Entry = {
   /** 正解と別解。先頭が主たる正解 */
   answers: string[];
 };
+
+/**
+ * 1 問分のファイルの、quiz_data からの相対パスを組み立てる。
+ *
+ * VOICEPEAK は連番だけの出力ができず接尾語が必須のため、接尾語にバッチ名
+ * （日付）を指定する運用とし、`{batch}/{seq}-{batch}.{ext}` を期待する。
+ * 接尾語がフォルダ名と一致することで、別バッチのファイルを取り違えて
+ * 置いた場合にファイルが見つからず検出できる。
+ */
+function questionFilePath(batch: string, seq: number, ext: string): string {
+  return `${batch}/${seq}-${batch}${ext}`;
+}
 
 /**
  * RFC 4180 相当の CSV パーサ。
@@ -175,7 +187,7 @@ function toEntry(row: Row, lineNumber: number, errors: string[]): Entry | undefi
   const paths = {} as Record<(typeof REQUIRED_EXTENSIONS)[number], string>;
 
   for (const ext of REQUIRED_EXTENSIONS) {
-    const relativePath = `${row.batch}/${seq}${ext}`;
+    const relativePath = questionFilePath(row.batch, seq, ext);
     if (!existsSync(join(quizDataDir, relativePath))) {
       errors.push(`${label} (${id}): ${relativePath} が見つかりません。`);
       continue;
