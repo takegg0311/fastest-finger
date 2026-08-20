@@ -3,22 +3,23 @@ dist/
 *.tsbuildinfo
 .DS_Store
 
-# 出題データとジングル SE は各自ローカルに配置する（リポジトリには含めない）
-public/sound/*
-public/quiz_data/*
+# 出題データとジングル SE は各自ローカルに配置する（リポジトリには含めない）。
+# PoC とオンライン版で共有するため、リポジトリルートに置いている。
+sound/*
+quiz_data/*
 
 # ただしデータ形式のサンプルとして 1 問だけ追跡する。
 # 除外したディレクトリの中身は再包含できないため、
 # 20260820/ をいったん戻してから中身を除外し直している。
-!public/quiz_data/questions_example.csv
-!public/quiz_data/20260820/
-public/quiz_data/20260820/*
-!public/quiz_data/20260820/0.lab
-!public/quiz_data/20260820/0.txt
-!public/quiz_data/20260820/0.wav
+!quiz_data/questions_example.csv
+!quiz_data/20260820/
+quiz_data/20260820/*
+!quiz_data/20260820/0.lab
+!quiz_data/20260820/0.txt
+!quiz_data/20260820/0.wav
 
 # 上記データから生成されるため追跡しない
-public/quiz_data/manifest.json
+quiz_data/manifest.json
 
 # 設計時の資料
 *.pdf
