@@ -15,6 +15,7 @@ response_format による JSON 強制を使わないのは OpenAI 側と同じ�
 
 from __future__ import annotations
 
+from .base import ProviderError
 from .openai_provider import OpenAIProvider
 
 #: xAI の OpenAI 互換エンドポイント。ここだけが OpenAI との接続上の差分。
@@ -25,6 +26,9 @@ BASE_URL = "https://api.x.ai/v1"
 # OpenAI の gpt-5 / gpt-5-mini と同じく「最上位と軽量」の組で揃える。
 MODELS = ("grok-4.6", "grok-4.3")
 
+#: キー不正の 400 を見分ける手がかり。xAI は機械可読な識別子を返さない。
+_MISCLASSIFIED_AUTH = "Incorrect API key"
+
 
 class XaiProvider(OpenAIProvider):
     vendor = "xai"
@@ -32,3 +36,28 @@ class XaiProvider(OpenAIProvider):
     models = MODELS
     env_key = "XAI_API_KEY"
     base_url = BASE_URL
+
+    async def complete(self, prompt: str, model: str) -> str:
+        try:
+            return await super().complete(prompt, model)
+        except ProviderError as error:
+            raise _reclassify(error) from error
+
+
+def _reclassify(error: ProviderError) -> ProviderError:
+    """xAI 固有のエラー分類の差を吸収する。
+
+    xAI はキーが不正でも 401 ではなく 400 を返すため、OpenAI 用の分類を
+    そのまま通すと bad_request になり、画面から「キーが違う」と分からない。
+
+    xAI の 400 応答には Gemini の `reason` にあたる機械可読な識別子が無く、
+    本文の文言で見るしかない。文言が変わればここは効かなくなるが、その場合も
+    bad_request として出るだけで、握り潰しにはならない。
+    """
+    if error.kind != "bad_request" or _MISCLASSIFIED_AUTH not in error.message:
+        return error
+
+    # 元の message は OpenAI 用の「リクエストが受け付けられませんでした」で
+    # 始まっている。前置きを重ねると二重になるので、原文だけを載せ替える。
+    _, _, detail = error.message.partition(": ")
+    return ProviderError("auth", f"認証に失敗しました: {detail or error.message}")

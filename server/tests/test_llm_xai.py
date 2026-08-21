@@ -23,7 +23,7 @@ from app.llm import openai_provider
 from app.llm.base import ProviderError
 from app.llm.openai_provider import OpenAIProvider
 from app.llm.router import router
-from app.llm.xai_provider import BASE_URL, XaiProvider
+from app.llm.xai_provider import BASE_URL, XaiProvider, _reclassify
 
 
 @pytest.fixture
@@ -226,3 +226,38 @@ def _response(content: str) -> Any:
             self.choices = [Choice()]
 
     return Response()
+
+
+def test_キー不正の_400_は_auth_に分類される() -> None:
+    """xAI はキーが不正でも 401 ではなく 400 を返す。
+
+    OpenAI 用の分類をそのまま通すと bad_request になり、画面から
+    「キーが違う」と分からない。実際の応答の文言をそのまま写して検証する。
+    """
+    original = ProviderError(
+        "bad_request",
+        "リクエストが受け付けられませんでした: Error code: 400 - "
+        "{'code': 'invalid-argument', 'error': 'Incorrect API key provided.'}",
+    )
+
+    reclassified = _reclassify(original)
+
+    assert reclassified.kind == "auth"
+    # 前置きが二重にならないこと
+    assert "リクエストが受け付けられませんでした" not in reclassified.message
+
+
+def test_キー不正でない_400_は_bad_request_のまま() -> None:
+    """400 を一律 auth に寄せない。"""
+    original = ProviderError(
+        "bad_request", "リクエストが受け付けられませんでした: unknown model"
+    )
+
+    assert _reclassify(original).kind == "bad_request"
+
+
+def test_bad_request_以外は_触らない() -> None:
+    """レート制限などの分類を巻き込まないこと。"""
+    original = ProviderError("rate_limit", "レート制限に達しました")
+
+    assert _reclassify(original) is original
