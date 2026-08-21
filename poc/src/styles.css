@@ -267,3 +267,287 @@ body {
   border-radius: 999px;
   cursor: pointer;
 }
+
+/* LLM 予測枠 */
+.llm-panel {
+  width: 100%;
+  margin-top: 1rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.llm-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.llm-panel-title {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.llm-panel-status {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.llm-health {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.llm-health.is-online {
+  color: var(--correct);
+}
+
+.llm-health.is-offline {
+  color: var(--muted);
+}
+
+.llm-refresh-button {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.8rem;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.llm-refresh-button:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.llm-panel-notice,
+.llm-panel-unusable {
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  line-height: 1.8;
+}
+
+.llm-panel-notice code {
+  padding: 0.1rem 0.4rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 0.25rem;
+  font-size: 0.8rem;
+}
+
+/* 枠は 4 つ並べる。狭い画面では 2 列・1 列へ落とす */
+.llm-slots {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 60rem) {
+  .llm-slots {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 30rem) {
+  .llm-slots {
+    grid-template-columns: 1fr;
+  }
+}
+
+.llm-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.8rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.6rem;
+}
+
+.llm-slot-selectors {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.llm-select {
+  width: 100%;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.8rem;
+  color: var(--fg);
+  background: #1b1f29;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 0.35rem;
+}
+
+.llm-select:disabled {
+  color: var(--muted);
+}
+
+.llm-slot-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-height: 5.5rem;
+}
+
+.llm-slot-idle,
+.llm-slot-pending {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.spinner {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 3s;
+  }
+}
+
+.llm-slot-answer {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  line-height: 1.5;
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.llm-slot-mark.is-correct {
+  color: var(--correct);
+}
+
+.llm-slot-mark.is-wrong {
+  color: var(--wrong);
+}
+
+.llm-slot-continuation {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.llm-slot-violation {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.llm-slot-violation-reason,
+.llm-slot-error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.llm-slot-error {
+  color: #ffb4b6;
+}
+
+.llm-slot-footer {
+  margin-top: auto;
+  padding-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.llm-slot-elapsed {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.llm-detail-button {
+  padding: 0.2rem 0.6rem;
+  font-size: 0.7rem;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* 生レスポンスのモーダル */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: rgba(0, 0, 0, 0.65);
+  z-index: 10;
+}
+
+.modal {
+  width: min(44rem, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1.25rem;
+  background: #171b24;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 0.7rem;
+}
+
+.modal-title {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.modal-raw {
+  margin: 0;
+  padding: 0.9rem;
+  overflow: auto;
+  background: #0d1017;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.modal-close {
+  align-self: flex-end;
+  padding: 0.5rem 1.5rem;
+  font-size: 0.85rem;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 999px;
+  cursor: pointer;
+}

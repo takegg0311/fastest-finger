@@ -8,6 +8,7 @@ import {
   type ManifestEntry,
 } from './lib/manifest';
 import { playJingle } from './lib/sound';
+import { useLlmPrediction } from './lib/useLlmPrediction';
 import {
   canAnswer,
   canBuzz,
@@ -16,6 +17,7 @@ import {
 } from './state/quizMachine';
 import { AnswerInput } from './components/AnswerInput';
 import { BuzzButton } from './components/BuzzButton';
+import { LlmPanel } from './components/LlmPanel';
 import { QuestionView } from './components/QuestionView';
 import { ResultView } from './components/ResultView';
 import { StartScreen } from './components/StartScreen';
@@ -32,6 +34,8 @@ export function App() {
   const lastIdRef = useRef<string | undefined>(undefined);
 
   const { phase, question, frozenLength, judgement, error } = state;
+
+  const llm = useLlmPrediction();
 
   // 起動時に問題一覧を読み込む
   useEffect(() => {
@@ -108,6 +112,7 @@ export function App() {
 
     // データ読み込みを待つ間、前問の結果を残したままにしない
     dispatch({ type: 'next' });
+    llm.reset();
 
     try {
       const loaded = await loadQuestion(entry);
@@ -122,7 +127,7 @@ export function App() {
         message: reason instanceof Error ? reason.message : String(reason),
       });
     }
-  }, [entries]);
+  }, [entries, llm]);
 
   /** 早押し。音声と文字送りの双方をその場で止める */
   const handleBuzz = useCallback(() => {
@@ -136,8 +141,13 @@ export function App() {
     // 押したことのフィードバックなので、鳴り終わりを待たずに回答へ進ませる
     void playJingle('buzz');
 
-    dispatch({ type: 'buzz', visibleLength: visibleLength(question.alignment, at) });
-  }, [phase, question, currentTime, stopTracking]);
+    const shown = visibleLength(question.alignment, at);
+    dispatch({ type: 'buzz', visibleLength: shown });
+
+    // 早押しした時点で見えていた文字列だけを送る。丸めずに生のまま渡すのは、
+    // 早押しの実態に忠実であることを優先するため。問題文の全文と正解は送らない。
+    llm.run([...question.text].slice(0, shown).join(''), false);
+  }, [phase, question, currentTime, stopTracking, llm]);
 
   /** 早押しされないまま音声が終わった場合 */
   const handleAudioEnded = useCallback(() => {
@@ -147,7 +157,11 @@ export function App() {
       type: 'audioEnded',
       visibleLength: [...question.text].length,
     });
-  }, [question, stopTracking]);
+
+    // 読み切られた場合は続きの予測が要らないため、全文を complete で送る。
+    // 全文を渡すことになるが、正解は依然として送らない。
+    llm.run(question.text, true);
+  }, [question, stopTracking, llm]);
 
   const handleSubmitAnswer = useCallback(
     (input: string) => {
@@ -227,7 +241,36 @@ export function App() {
               onNext={() => void startQuestion()}
             />
           )}
+
+          <LlmPanel
+            health={llm.health}
+            providers={llm.providers}
+            slots={llm.slots}
+            predictions={llm.predictions}
+            answers={question.answers}
+            // 人間が回答するまで正誤は伏せる。先に ○/× が出ると、
+            // それを見て答えられてしまう。
+            revealJudgement={phase === 'result'}
+            // 出題中に選択を変えると、送信済みの枠と表示がずれる
+            disabled={phase === 'jingle' || phase === 'reading'}
+            onRefresh={() => void llm.refresh()}
+            onSelect={llm.selectSlot}
+          />
         </>
+      )}
+
+      {(phase === 'loading' || phase === 'idle') && (
+        <LlmPanel
+          health={llm.health}
+          providers={llm.providers}
+          slots={llm.slots}
+          predictions={llm.predictions}
+          answers={[]}
+          revealJudgement={false}
+          disabled={false}
+          onRefresh={() => void llm.refresh()}
+          onSelect={llm.selectSlot}
+        />
       )}
     </main>
   );
