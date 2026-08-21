@@ -153,6 +153,13 @@ CSV の `text` と出力された `.txt` の中身が一致しない場合、
 npm run dev -w poc
 ```
 
+LLM の予測枠を使う場合は、別のターミナルで server も起動する
+（起動しなくても早押しと回答は動く）。
+
+```bash
+cd server && uv run uvicorn app.main:app --port 8000
+```
+
 `dev` / `build` は、実行前に `questions.csv` を読んで
 問題一覧 `manifest.json` を自動生成する。データを追加・削除した際は再実行する。
 
@@ -171,6 +178,22 @@ npm run manifest -w poc
 5. 「次へ」で次の問題へ
 
 早押しせずに最後まで再生された場合も、そのまま回答できる。
+
+### LLM の予測枠
+
+[LLM による問題予測](#llm-による問題予測)を設定していると、画面下部に予測枠が出る。
+早押しすると、その時点までの問題文が選択した LLM へ並列に送られ、
+予測した答え・補完した問題文・応答時間が、返ってきた枠から順に表示される。
+
+**予測の正誤は、自分が回答するまで表示されない。** 先に ○/× が出ると、
+それを見て答えられてしまうため。
+
+server を起動していない場合は「サーバー未起動」と出るだけで、
+早押しと回答は従来どおり使える。PoC を開いたまま server を起動した場合は、
+枠の「再チェック」を押せばリロードせずに使えるようになる。
+
+vendor とモデルの選択は `localStorage` に保存され、次回起動時に復元される。
+同じ vendor の別モデルを複数の枠に置いて比較することもできる。
 
 ### 仕組み — 音声と問題文の同期
 
@@ -219,6 +242,10 @@ API キーはブラウザのバンドルに埋め込めず、各社 API には�
 ```
 poc (vite :5173) ──/api/llm/* をプロキシ──▶ server (:8000) ──▶ 各社 API
 ```
+
+PoC は起動時に `/api/llm/health` を 1 回だけ叩き、疎通しなければ予測枠を
+縮退させる（早押しと回答は従来どおり動く）。後から server を起動した場合は、
+画面の「再チェック」で拾い直せる。
 
 **問題文の全文と正解はサーバへ送らない。** LLM へ渡すのは早押し時点で画面に
 出ていた文字列だけで、正解は PoC 側が保持したままにする。
@@ -303,6 +330,18 @@ server/app/llm/
 ├── registry.py          プロバイダ一覧
 ├── openai_provider.py   OpenAI
 └── router.py            /api/llm/health, /api/llm/predict
+```
+
+```
+poc/src/
+├── lib/
+│   ├── llm.ts               health / predict の呼び出し
+│   ├── llmSlots.ts          枠の選択と localStorage への保存
+│   └── useLlmPrediction.ts  疎通確認・並列送信・結果の保持
+└── components/
+    ├── LlmPanel.tsx         4 枠のまとめと縮退表示
+    ├── LlmSlot.tsx          枠 1 つ分の選択と結果
+    └── RawResponseModal.tsx 生の応答を見せるモーダル
 ```
 
 ## オンライン版
