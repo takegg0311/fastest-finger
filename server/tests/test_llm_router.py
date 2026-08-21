@@ -57,10 +57,10 @@ def test_キーが無ければ理由付きで_unavailable(
 
 
 def test_未実装の社は理由に_issue_番号が入る(client: TestClient) -> None:
-    anthropic = _find(client, "anthropic")
+    google = _find(client, "google")
 
-    assert anthropic["available"] is False
-    assert "未実装" in anthropic["reason"]
+    assert google["available"] is False
+    assert "未実装" in google["reason"]
 
 
 def test_予測が成功すると応答時間付きで返る(
