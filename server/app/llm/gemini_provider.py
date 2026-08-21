@@ -10,7 +10,11 @@ from __future__ import annotations
 from .base import Provider, ProviderError
 from .config import REQUEST_TIMEOUT_SECONDS, api_key
 
-MODELS = ("gemini-2.5-pro", "gemini-2.5-flash")
+# gemini-2.5-pro は新規ユーザーへの提供が終わっており、選ぶと 404 になる。
+# models API の一覧には出てくるが呼ぶと弾かれるため、一覧では気づけない。
+# 代替として Google 自身が案内する 3.1-pro を採る。preview は予告なく
+# 変わりうるが、他社と揃えた「最上位と軽量」の組を保つことを優先した。
+MODELS = ("gemini-3.1-pro-preview", "gemini-3.7-flash")
 
 # google-genai の HttpOptions.timeout はミリ秒指定（int）で、SDK 内部で
 # 1000 で割って httpx へ渡している。config の秒（float）と単位が違うため

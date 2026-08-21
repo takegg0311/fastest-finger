@@ -56,7 +56,7 @@ def test_キー未設定なら_complete_は_auth_で失敗する(
     # complete は async だが、キー未設定は SDK を触る前に弾かれる。
     # 非同期テストの仕組みを増やさずに済ませるため asyncio.run で回す。
     with pytest.raises(ProviderError) as raised:
-        asyncio.run(GeminiProvider().complete("問題文", "gemini-2.5-pro"))
+        asyncio.run(GeminiProvider().complete("問題文", "gemini-3.1-pro-preview"))
 
     assert raised.value.kind == "auth"
 
@@ -109,7 +109,7 @@ def test_google_vendor_で予測が成功する(
         "/api/llm/predict",
         json={
             "vendor": "google",
-            "model": "gemini-2.5-pro",
+            "model": "gemini-3.1-pro-preview",
             "partial_text": "日本で一番高い山は富士山です",
             "complete": False,
         },
