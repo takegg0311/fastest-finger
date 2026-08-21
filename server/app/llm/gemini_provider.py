@@ -83,6 +83,12 @@ def _normalize(error: Exception) -> ProviderError:
     # 属性の有無で判定する。
     code = getattr(error, "code", None)
     if isinstance(code, int):
+        # Gemini はキーが不正でも 401 ではなく 400 INVALID_ARGUMENT を返す。
+        # ステータスだけで見ると bad_request になり、画面から「キーが違う」と
+        # 分からなくなるため、details の reason で先に拾う。
+        # 文言ではなく機械可読な識別子を見るので、メッセージの変更には影響されない。
+        if _is_invalid_api_key(error):
+            return ProviderError("auth", f"認証に失敗しました: {message}")
         if code in (401, 403):
             return ProviderError("auth", f"認証に失敗しました: {message}")
         if code == 429:
@@ -91,3 +97,25 @@ def _normalize(error: Exception) -> ProviderError:
             return ProviderError("bad_request", f"リクエストが受け付けられませんでした: {message}")
 
     return ProviderError("unknown", message)
+
+
+def _is_invalid_api_key(error: Exception) -> bool:
+    """キー不正による 400 かどうか。
+
+    Gemini は details に `reason: "API_KEY_INVALID"` を載せてくるので、
+    それを探す。details の形は APIError.details（dict）に入るが、
+    SDK のバージョンで欠けることもあるため、無ければ False に倒して
+    通常の bad_request として扱う。
+    """
+    details = getattr(error, "details", None)
+    if not isinstance(details, dict):
+        return False
+
+    entries = details.get("error", {}).get("details", [])
+    if not isinstance(entries, list):
+        return False
+
+    return any(
+        isinstance(entry, dict) and entry.get("reason") == "API_KEY_INVALID"
+        for entry in entries
+    )

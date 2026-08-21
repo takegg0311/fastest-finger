@@ -151,3 +151,49 @@ class _ApiError(Exception):
 def _find(client: TestClient, vendor: str) -> dict:
     providers = client.get("/api/llm/health").json()["providers"]
     return next(p for p in providers if p["vendor"] == vendor)
+
+
+def test_キー不正の_400_は_auth_に分類される() -> None:
+    """Gemini はキーが不正でも 401 ではなく 400 を返す。
+
+    ステータスだけで見ると bad_request になり、画面から「キーが違う」と
+    分からなくなる。実際の応答から details の形をそのまま写して検証する。
+    """
+
+    class ClientError(Exception):
+        code = 400
+        details = {
+            "error": {
+                "code": 400,
+                "message": "API key not valid. Please pass a valid API key.",
+                "status": "INVALID_ARGUMENT",
+                "details": [
+                    {
+                        "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+                        "reason": "API_KEY_INVALID",
+                        "domain": "googleapis.com",
+                    }
+                ],
+            }
+        }
+
+    assert _normalize(ClientError("400 INVALID_ARGUMENT")).kind == "auth"
+
+
+def test_キー不正でない_400_は_bad_request_のまま() -> None:
+    """reason が無い 400 まで auth に寄せない。"""
+
+    class ClientError(Exception):
+        code = 400
+        details = {"error": {"code": 400, "message": "bad model", "details": []}}
+
+    assert _normalize(ClientError("400 INVALID_ARGUMENT")).kind == "bad_request"
+
+
+def test_details_が無くても_400_は_bad_request_として扱える() -> None:
+    """SDK が details を載せない場合でも落ちないこと。"""
+
+    class ClientError(Exception):
+        code = 400
+
+    assert _normalize(ClientError("400")).kind == "bad_request"
