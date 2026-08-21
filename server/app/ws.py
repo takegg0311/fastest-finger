@@ -75,7 +75,13 @@ class ConnectionManager:
             await self.send(websocket, message)
 
 
-def _get_room(websocket: WebSocket) -> Room:
+def _get_room(websocket: WebSocket) -> Room | None:
+    """ルームを返す。出題データを読めていない場合は None。
+
+    main.py が questions.csv の検証に失敗した場合、サーバは LLM 中継のために
+    起動を続けるがルームは作らない。その状態で早押しを受け付けると
+    問題 0 件のまま遊べてしまうため、接続の時点で閉じる。
+    """
     return websocket.app.state.room
 
 
@@ -88,6 +94,10 @@ async def websocket_endpoint(websocket: WebSocket) -> None:
     await websocket.accept()
 
     room = _get_room(websocket)
+    if room is None:
+        await websocket.close(code=1011, reason="quiz data unavailable")
+        return
+
     manager = _get_manager(websocket)
     host_token: str = websocket.app.state.host_token
 
