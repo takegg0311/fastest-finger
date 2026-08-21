@@ -11,6 +11,7 @@ from dataclasses import dataclass
 
 from .base import Provider
 from .config import api_key
+from .gemini_provider import GeminiProvider
 from .openai_provider import OpenAIProvider
 
 
@@ -24,14 +25,18 @@ class Planned:
 
 
 # 実装済みのプロバイダ
-PROVIDERS: tuple[Provider, ...] = (OpenAIProvider(),)
+PROVIDERS: tuple[Provider, ...] = (OpenAIProvider(), GeminiProvider())
 
 # 未実装の社。担当 Issue が終わり次第 PROVIDERS へ移す。
 PLANNED: tuple[Planned, ...] = (
     Planned("anthropic", "Claude", "#15"),
-    Planned("google", "Gemini", "#16"),
     Planned("xai", "xAI Grok", "#17"),
 )
+
+# health に並べる順。実装済みを先に出すと、社が実装されるたびに PoC の
+# セレクトボックスの並びが入れ替わってしまう。並びは実装状況ではなく
+# この定数で固定し、実装の有無は available だけで表す。
+DISPLAY_ORDER: tuple[str, ...] = ("openai", "anthropic", "google", "xai")
 
 
 def find(vendor: str) -> Provider | None:
@@ -42,22 +47,27 @@ def find(vendor: str) -> Provider | None:
 
 
 def health_view() -> list[dict[str, object]]:
-    """health のレスポンス本体。実装済みと未実装をこの順で並べる。"""
+    """health のレスポンス本体。DISPLAY_ORDER の順に全社を並べる。"""
     views: list[dict[str, object]] = []
 
-    for provider in PROVIDERS:
-        available = api_key(provider.env_key) is not None
-        view: dict[str, object] = {
-            "vendor": provider.vendor,
-            "label": provider.label,
-            "available": available,
-            "models": list(provider.models) if available else [],
-        }
-        if not available:
-            view["reason"] = f"{provider.env_key} が設定されていません"
-        views.append(view)
+    for vendor in DISPLAY_ORDER:
+        provider = find(vendor)
+        if provider is not None:
+            available = api_key(provider.env_key) is not None
+            view: dict[str, object] = {
+                "vendor": provider.vendor,
+                "label": provider.label,
+                "available": available,
+                "models": list(provider.models) if available else [],
+            }
+            if not available:
+                view["reason"] = f"{provider.env_key} が設定されていません"
+            views.append(view)
+            continue
 
-    for planned in PLANNED:
+        planned = _find_planned(vendor)
+        if planned is None:  # pragma: no cover - DISPLAY_ORDER の書き漏らし
+            continue
         views.append(
             {
                 "vendor": planned.vendor,
@@ -69,3 +79,10 @@ def health_view() -> list[dict[str, object]]:
         )
 
     return views
+
+
+def _find_planned(vendor: str) -> Planned | None:
+    for planned in PLANNED:
+        if planned.vendor == vendor:
+            return planned
+    return None
