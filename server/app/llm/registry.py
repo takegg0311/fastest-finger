@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from .base import Provider
 from .config import api_key
 from .openai_provider import OpenAIProvider
+from .xai_provider import XaiProvider
 
 
 @dataclass(frozen=True)
@@ -24,14 +25,18 @@ class Planned:
 
 
 # 実装済みのプロバイダ
-PROVIDERS: tuple[Provider, ...] = (OpenAIProvider(),)
+PROVIDERS: tuple[Provider, ...] = (OpenAIProvider(), XaiProvider())
 
 # 未実装の社。担当 Issue が終わり次第 PROVIDERS へ移す。
 PLANNED: tuple[Planned, ...] = (
     Planned("anthropic", "Claude", "#15"),
     Planned("google", "Gemini", "#16"),
-    Planned("xai", "xAI Grok", "#17"),
 )
+
+# health に並べる順。実装の有無で順番が動くと PoC の 4 枠も動いてしまうため、
+# 実装済み / 未実装とは切り離してここで固定する。社が実装されるたびに
+# 画面の並びが入れ替わると、続けて遊ぶ利用者が枠を取り違えるため。
+DISPLAY_ORDER: tuple[str, ...] = ("openai", "anthropic", "google", "xai")
 
 
 def find(vendor: str) -> Provider | None:
@@ -42,7 +47,7 @@ def find(vendor: str) -> Provider | None:
 
 
 def health_view() -> list[dict[str, object]]:
-    """health のレスポンス本体。実装済みと未実装をこの順で並べる。"""
+    """health のレスポンス本体。DISPLAY_ORDER の順に 4 社を並べる。"""
     views: list[dict[str, object]] = []
 
     for provider in PROVIDERS:
@@ -68,4 +73,13 @@ def health_view() -> list[dict[str, object]]:
             }
         )
 
+    # DISPLAY_ORDER に無い社は末尾へ回す。並び順の更新漏れで
+    # 社が health から消えてしまうより、順番が崩れるほうが軽いため。
+    def rank(view: dict[str, object]) -> int:
+        vendor = view["vendor"]
+        if vendor in DISPLAY_ORDER:
+            return DISPLAY_ORDER.index(vendor)  # type: ignore[arg-type]
+        return len(DISPLAY_ORDER)
+
+    views.sort(key=rank)
     return views

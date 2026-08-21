@@ -1,5 +1,9 @@
 """OpenAI プロバイダ。
 
+OpenAI 互換 API を提供する社（xAI など）はこれを継承し、base_url と
+env_key だけを差し替える。complete() が接続先を self.base_url から取るのは
+そのためで、OpenAI 自身は None のまま SDK の既定へ繋ぐ。
+
 response_format による JSON 強制は使わない。応答フォーマット違反の観測が
 この PoC の目的の一つであり、強制すると違反が起きなくなるため。
 """
@@ -17,6 +21,10 @@ class OpenAIProvider(Provider):
     label = "OpenAI"
     models = MODELS
     env_key = "OPENAI_API_KEY"
+    #: 接続先。OpenAI 互換 API の社（xAI など）が継承して差し替えるための口で、
+    #: None なら SDK の既定（OpenAI 本家）へ繋ぐ。誤って別社のキーを
+    #: OpenAI へ送らないよう、宛先は必ずここから決めること。
+    base_url: str | None = None
 
     async def complete(self, prompt: str, model: str) -> str:
         key = api_key(self.env_key)
@@ -30,7 +38,9 @@ class OpenAIProvider(Provider):
         except ImportError as error:  # pragma: no cover - 依存が入っていれば通らない
             raise ProviderError("unknown", f"openai SDK を読み込めません: {error}") from error
 
-        client = AsyncOpenAI(api_key=key, timeout=REQUEST_TIMEOUT_SECONDS)
+        client = AsyncOpenAI(
+            api_key=key, timeout=REQUEST_TIMEOUT_SECONDS, base_url=self.base_url
+        )
 
         try:
             response = await client.chat.completions.create(
@@ -50,6 +60,9 @@ class OpenAIProvider(Provider):
 
 def _normalize(error: Exception) -> ProviderError:
     """OpenAI SDK の例外を、画面に出す粒度へ写す。
+
+    OpenAI 互換 API の社も同じ SDK の例外型で失敗するため、継承先から
+    そのまま使える。文言に社名を入れていないのはこのためである。
 
     SDK の例外クラスを直接 import せず名前で判定するのは、
     SDK のバージョン差で import に失敗しても分類を続けられるようにするため。
