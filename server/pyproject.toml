@@ -9,6 +9,7 @@ dependencies = [
     "websockets>=14",
     "python-dotenv>=1.0",
     "openai>=1.60",
+    "google-genai>=1.0",
 ]
 
 [dependency-groups]
