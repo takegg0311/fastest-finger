@@ -5,6 +5,7 @@
   "type": "module",
   "workspaces": [
     "poc",
+    "llm-poc",
     "web"
   ]
 }
