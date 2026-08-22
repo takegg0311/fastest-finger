@@ -56,11 +56,25 @@ def test_キーが無ければ理由付きで_unavailable(
     assert "OPENAI_API_KEY" in openai["reason"]
 
 
-def test_未実装の社は理由に_issue_番号が入る(client: TestClient) -> None:
-    google = _find(client, "google")
+def test_未実装の社は理由に_issue_番号が入る(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """未実装の社が health にどう出るかを確かめる。
 
-    assert google["available"] is False
-    assert "未実装" in google["reason"]
+    実在の社を使うと、その社が実装された時点でテストが対象を失う
+    （実際 #15 / #16 のたびに書き換えが要った）。検証したいのは
+    Planned の見え方であって特定の社ではないため、架空の社を差し込む。
+    """
+    planned = registry.Planned("acme", "Acme LLM", "#999")
+    monkeypatch.setattr(registry, "PLANNED", (planned,))
+    monkeypatch.setattr(registry, "DISPLAY_ORDER", (*registry.DISPLAY_ORDER, "acme"))
+
+    acme = _find(client, "acme")
+
+    assert acme["available"] is False
+    assert acme["models"] == []
+    assert "未実装" in acme["reason"]
+    assert "#999" in acme["reason"]
 
 
 def test_予測が成功すると応答時間付きで返る(

@@ -232,7 +232,7 @@ poc/
 途中まで読み上げられた問題文から、LLM に続きを予測させて答えを出させる機能。
 人間の早押しと並べて、どこまで当てられるかを観測する。
 
-現在は **OpenAI / Claude に対応**（Gemini / xAI Grok は今後追加）。
+現在は **OpenAI / Claude / Gemini に対応**（xAI Grok は今後追加）。
 
 ### 仕組み
 
@@ -263,6 +263,7 @@ cp server/.env.example server/.env
 | --- | --- |
 | `OPENAI_API_KEY` | OpenAI |
 | `ANTHROPIC_API_KEY` | Claude |
+| `GEMINI_API_KEY` | Google Gemini |
 | `LLM_PLAIN_ANSWER_MAX_LENGTH` | 読み切り時に平文の答えを許容する最大文字数（既定 30） |
 
 ### 起動
@@ -331,6 +332,7 @@ server/app/llm/
 ├── registry.py          プロバイダ一覧
 ├── openai_provider.py   OpenAI
 ├── anthropic_provider.py Claude
+├── gemini_provider.py   Google Gemini
 └── router.py            /api/llm/health, /api/llm/predict
 ```
 
