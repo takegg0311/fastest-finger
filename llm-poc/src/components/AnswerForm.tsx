@@ -7,8 +7,8 @@
  */
 type Props = {
   expectedAnswer: string;
-  /** 予測が 1 件でも届いているか。届く前に確定させない */
-  hasResults: boolean;
+  /** 確定してよいか。全枠の応答が揃うまで false */
+  canConfirm: boolean;
   /** 記録の送信中 */
   saving: boolean;
   /** 確定済み。二重記録を防ぐ */
@@ -20,7 +20,7 @@ type Props = {
 
 export function AnswerForm({
   expectedAnswer,
-  hasResults,
+  canConfirm,
   saving,
   saved,
   onChange,
@@ -47,7 +47,7 @@ export function AnswerForm({
         <button
           type="button"
           className="confirm-button"
-          disabled={!hasResults || empty || saving || saved}
+          disabled={!canConfirm || empty || saving || saved}
           onClick={onConfirm}
         >
           {saving ? '記録中…' : saved ? '記録済み' : 'この問題を確定'}
