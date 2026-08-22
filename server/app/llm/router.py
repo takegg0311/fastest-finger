@@ -4,8 +4,12 @@ PoC はフロントエンド単体でバックエンドを持たないが、API 
 埋め込めず、各社 API にはブラウザからの直接呼び出しに CORS 制限がある。
 そのためここで中継する。
 
-問題文の全文と正解は受け取らない。PoC 側が保持したままにし、
+/predict は問題文の全文と正解を受け取らない。PoC 側が保持したままにし、
 LLM へ渡すのは早押し時点で画面に出ていた文字列だけとする。
+
+/log は llm-poc（LLM 予測比較 PoC）の記録用で、こちらは正解と正誤を受け取る。
+predict に相乗りさせないのは、predict の時点ではまだ正解が入力されておらず
+（画面の流れが「送信 → 回答を待つ → 正解を入力」のため）、正誤を残せないため。
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from .base import ProviderError
 from .config import REQUEST_TIMEOUT_SECONDS
+from .log import LogRecord, append_records
 from .parser import parse_response
 from .prompt import build_prompt
 from .registry import find, health_view
@@ -110,6 +115,67 @@ async def predict(request: PredictRequest) -> dict[str, object]:
         "elapsed_ms": elapsed_ms,
         "raw": raw,
     }
+
+
+class LogRecordRequest(BaseModel):
+    """1 送信 × 1 LLM ぶんの記録。"""
+
+    vendor: str
+    model: str
+    #: LLM が返した答え。違反・エラー時は空
+    answer: str = ""
+    #: 補完された問題文全文。読み切り時と失敗時は None
+    continuation: str | None = None
+    elapsed_ms: int = 0
+    ok: bool = False
+    #: 失敗の種別。成功時は None
+    error_kind: str | None = None
+    #: 最終的な正誤（手動正解を反映した後）
+    correct: bool = False
+    #: 手動正解ボタンで正解にしたか
+    manual: bool = False
+
+
+class LogRequest(BaseModel):
+    question_text: str = Field(min_length=1)
+    complete: bool = False
+    expected_answer: str = ""
+    records: list[LogRecordRequest] = Field(min_length=1)
+
+
+@router.post("/log")
+async def log(request: LogRequest) -> dict[str, object]:
+    """予測結果を CSV へ追記する。
+
+    記録に失敗しても実験そのものは続けられるため、画面側は結果を見て
+    メッセージを出すだけでよい。ここでは書けたかどうかを返す。
+    """
+    records = [
+        LogRecord(
+            vendor=record.vendor,
+            model=record.model,
+            answer=record.answer,
+            continuation=record.continuation,
+            elapsed_ms=record.elapsed_ms,
+            ok=record.ok,
+            error_kind=record.error_kind,
+            correct=record.correct,
+            manual=record.manual,
+        )
+        for record in request.records
+    ]
+
+    try:
+        written = append_records(
+            question_text=request.question_text,
+            complete=request.complete,
+            expected_answer=request.expected_answer,
+            records=records,
+        )
+    except OSError as error:
+        return {"ok": False, "error": f"記録先へ書き込めませんでした: {error}"}
+
+    return {"ok": True, "written": written}
 
 
 def _elapsed_ms(started: float) -> int:
