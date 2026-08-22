@@ -11,10 +11,12 @@ from .base import Provider, ProviderError
 from .config import REQUEST_TIMEOUT_SECONDS, api_key
 
 # gemini-2.5-pro は新規ユーザーへの提供が終わっており、選ぶと 404 になる。
-# models API の一覧には出てくるが呼ぶと弾かれるため、一覧では気づけない。
-# 代替として Google 自身が案内する 3.1-pro を採る。preview は予告なく
-# 変わりうるが、他社と揃えた「最上位と軽量」の組を保つことを優先した。
-MODELS = ("gemini-3.1-pro-preview", "gemini-3.7-flash")
+# 代替として案内される 3.1-pro は preview で、読み切り（complete=true）の
+# プロンプトを投げると Google 側が 504 を返して応答しなかった。
+# 早押しでは通るが読み切りで落ちるモデルは観測に使えないため、
+# GA の flash 2 つで揃える。他社のような「最上位と軽量」の組にはならないが、
+# 応答が返らないモデルを並べるより、比較できる 2 つを置くことを優先した。
+MODELS = ("gemini-3.7-flash", "gemini-3.5-flash")
 
 # google-genai の HttpOptions.timeout はミリ秒指定（int）で、SDK 内部で
 # 1000 で割って httpx へ渡している。config の秒（float）と単位が違うため
@@ -97,6 +99,11 @@ def _normalize(error: Exception) -> ProviderError:
             return ProviderError("auth", f"認証に失敗しました: {message}")
         if code == 429:
             return ProviderError("rate_limit", f"レート制限に達しました: {message}")
+        # 504 は Google 側が生成を打ち切ったときに返る。こちらの待ち時間ではなく
+        # 向こうの締め切りだが、利用者から見ればどちらも「待って駄目だった」なので
+        # timeout として出す。unknown に落ちると原因の見当がつかなくなる。
+        if code in (504, 408):
+            return ProviderError("timeout", f"応答がタイムアウトしました: {message}")
         if code in (400, 404):
             return ProviderError("bad_request", f"リクエストが受け付けられませんでした: {message}")
 
