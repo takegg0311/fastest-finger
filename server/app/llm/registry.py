@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .anthropic_provider import AnthropicProvider
 from .base import Provider
 from .config import api_key
 from .openai_provider import OpenAIProvider
@@ -24,11 +25,10 @@ class Planned:
 
 
 # 実装済みのプロバイダ
-PROVIDERS: tuple[Provider, ...] = (OpenAIProvider(),)
+PROVIDERS: tuple[Provider, ...] = (OpenAIProvider(), AnthropicProvider())
 
 # 未実装の社。担当 Issue が終わり次第 PROVIDERS へ移す。
 PLANNED: tuple[Planned, ...] = (
-    Planned("anthropic", "Claude", "#15"),
     Planned("google", "Gemini", "#16"),
     Planned("xai", "xAI Grok", "#17"),
 )
