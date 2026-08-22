@@ -19,11 +19,18 @@ import {
 /** server との疎通状態 */
 export type HealthStatus = 'checking' | 'online' | 'offline';
 
-/** 枠 1 つぶんの予測状態 */
+/**
+ * 枠 1 つぶんの予測状態。
+ *
+ * pending / done は送信時の vendor / model を持つ。記録する vendor / model を
+ * 「現在の枠選択」から読むと、応答が届いた後に枠を変えられた場合に、
+ * 古い予測と新しい選択を組み合わせた行が CSV に残る。
+ * 実験ログとして誤りなので、送信した時点の組をここへ固定する。
+ */
 export type SlotPrediction =
   | { state: 'idle' }
-  | { state: 'pending' }
-  | { state: 'done'; result: PredictResult };
+  | { state: 'pending'; vendor: string; model: string }
+  | { state: 'done'; vendor: string; model: string; result: PredictResult };
 
 export function useLlmPrediction() {
   const [health, setHealth] = useState<HealthStatus>('checking');
@@ -105,11 +112,12 @@ export function useLlmPrediction() {
       generationRef.current += 1;
       const generation = generationRef.current;
 
-      // 送信対象の枠だけを待機中にする
+      // 送信対象の枠だけを待機中にする。この時点の vendor / model を持たせ、
+      // 以降の記録はこれを使う（枠を変えられても影響を受けない）
       setPredictions(
         slots.map((slot) =>
           slot.vendor !== null && slot.model !== null
-            ? { state: 'pending' as const }
+            ? { state: 'pending' as const, vendor: slot.vendor, model: slot.model }
             : { state: 'idle' as const },
         ),
       );
@@ -117,15 +125,17 @@ export function useLlmPrediction() {
       setManualCorrect(slots.map(() => false));
 
       slots.forEach((slot, index) => {
-        if (slot.vendor === null || slot.model === null) return;
+        const vendor = slot.vendor;
+        const model = slot.model;
+        if (vendor === null || model === null) return;
 
-        void predict(slot.vendor, slot.model, questionText, complete).then((result) => {
+        void predict(vendor, model, questionText, complete).then((result) => {
           // 次の問題へ進んだ後に届いた応答は捨てる
           if (generationRef.current !== generation) return;
 
           setPredictions((current) =>
             current.map((prediction, i) =>
-              i === index ? { state: 'done', result } : prediction,
+              i === index ? { state: 'done', vendor, model, result } : prediction,
             ),
           );
         });
