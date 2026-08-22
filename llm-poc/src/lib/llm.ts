@@ -51,9 +51,35 @@ export type PredictViolation = {
   raw: string;
 };
 
+/**
+ * サーバ側が返す失敗の種別。base.py の ErrorKind と対になる。
+ * フロント都合の失敗（サーバへ届かなかった等）は 'network' / 'timeout' へ寄せる。
+ */
+export type ErrorKind =
+  | 'auth'
+  | 'rate_limit'
+  | 'timeout'
+  | 'network'
+  | 'bad_request'
+  | 'unknown';
+
+const ERROR_KINDS: readonly string[] = [
+  'auth',
+  'rate_limit',
+  'timeout',
+  'network',
+  'bad_request',
+  'unknown',
+];
+
 /** API エラーやネットワーク断 */
 export type PredictError = {
   status: 'error';
+  /**
+   * 失敗の種別。message へ潰さず残すのは、どのモデルがどう落ちたかが
+   * 比較実験の観測対象であり、CSV の error_kind 列に入るため。
+   */
+  kind: ErrorKind;
   message: string;
   elapsedMs: number;
 };
@@ -115,6 +141,7 @@ export async function predict(
     if (!response.ok) {
       return {
         status: 'error',
+        kind: 'network',
         message: `サーバがエラーを返しました（HTTP ${response.status}）`,
         elapsedMs: Math.round(performance.now() - startedAt),
       };
@@ -126,12 +153,14 @@ export async function predict(
     if (reason instanceof DOMException && reason.name === 'TimeoutError') {
       return {
         status: 'error',
+        kind: 'timeout',
         message: `応答がありませんでした（${PREDICT_TIMEOUT_MS / 1000} 秒）`,
         elapsedMs,
       };
     }
     return {
       status: 'error',
+      kind: 'network',
       message: reason instanceof Error ? reason.message : String(reason),
       elapsedMs,
     };
@@ -148,7 +177,12 @@ function toResult(body: unknown, startedAt: number): PredictResult {
   const fallbackElapsed = Math.round(performance.now() - startedAt);
 
   if (typeof body !== 'object' || body === null) {
-    return { status: 'error', message: '応答を解釈できませんでした', elapsedMs: fallbackElapsed };
+    return {
+      status: 'error',
+      kind: 'unknown',
+      message: '応答を解釈できませんでした',
+      elapsedMs: fallbackElapsed,
+    };
   }
 
   const data = body as Record<string, unknown>;
@@ -173,7 +207,15 @@ function toResult(body: unknown, startedAt: number): PredictResult {
 
   return {
     status: 'error',
+    kind: toErrorKind(data.error_kind),
     message: typeof data.error === 'string' ? data.error : '予測に失敗しました',
     elapsedMs,
   };
+}
+
+/** サーバの error_kind を型へ写す。知らない値は unknown へ寄せる */
+function toErrorKind(value: unknown): ErrorKind {
+  return typeof value === 'string' && ERROR_KINDS.includes(value)
+    ? (value as ErrorKind)
+    : 'unknown';
 }
