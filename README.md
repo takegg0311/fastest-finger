@@ -232,7 +232,7 @@ poc/
 途中まで読み上げられた問題文から、LLM に続きを予測させて答えを出させる機能。
 人間の早押しと並べて、どこまで当てられるかを観測する。
 
-現在は **OpenAI / Claude / Gemini に対応**（xAI Grok は今後追加）。
+現在は **OpenAI / Claude / Gemini / xAI Grok に対応**。
 
 ### 仕組み
 
@@ -250,6 +250,9 @@ PoC は起動時に `/api/llm/health` を 1 回だけ叩き、疎通しなけれ
 **問題文の全文と正解はサーバへ送らない。** LLM へ渡すのは早押し時点で画面に
 出ていた文字列だけで、正解は PoC 側が保持したままにする。
 
+xAI Grok は OpenAI 互換の API を提供しているため、専用の SDK は入れず、
+OpenAI SDK の接続先（`base_url`）を `https://api.x.ai/v1` へ差し替えて使う。
+
 ### セットアップ
 
 ```bash
@@ -264,6 +267,7 @@ cp server/.env.example server/.env
 | `OPENAI_API_KEY` | OpenAI |
 | `ANTHROPIC_API_KEY` | Claude |
 | `GEMINI_API_KEY` | Google Gemini |
+| `XAI_API_KEY` | xAI Grok |
 | `LLM_PLAIN_ANSWER_MAX_LENGTH` | 読み切り時に平文の答えを許容する最大文字数（既定 30） |
 
 ### 起動
@@ -333,6 +337,7 @@ server/app/llm/
 ├── openai_provider.py   OpenAI
 ├── anthropic_provider.py Claude
 ├── gemini_provider.py   Google Gemini
+├── xai_provider.py      xAI Grok（OpenAI 互換）
 └── router.py            /api/llm/health, /api/llm/predict
 ```
 

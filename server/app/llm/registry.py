@@ -14,6 +14,7 @@ from .base import Provider
 from .config import api_key
 from .gemini_provider import GeminiProvider
 from .openai_provider import OpenAIProvider
+from .xai_provider import XaiProvider
 
 
 @dataclass(frozen=True)
@@ -30,12 +31,12 @@ PROVIDERS: tuple[Provider, ...] = (
     OpenAIProvider(),
     AnthropicProvider(),
     GeminiProvider(),
+    XaiProvider(),
 )
 
 # 未実装の社。担当 Issue が終わり次第 PROVIDERS へ移す。
-PLANNED: tuple[Planned, ...] = (
-    Planned("xai", "xAI Grok", "#17"),
-)
+# 4 社とも実装済みになったため現在は空だが、社を増やす際の置き場として残す。
+PLANNED: tuple[Planned, ...] = ()
 
 # health に並べる順。実装済みを先に出すと、社が実装されるたびに PoC の
 # セレクトボックスの並びが入れ替わってしまう。並びは実装状況ではなく
@@ -82,6 +83,8 @@ def health_view() -> list[dict[str, object]]:
             }
         )
 
+    # DISPLAY_ORDER に書き漏らした社は health から消える。並び順の一貫性を
+    # 優先した結果で、テストが 4 社そろうことを見ているのでここでは補わない。
     return views
 
 

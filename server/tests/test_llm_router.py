@@ -31,6 +31,7 @@ def test_health_は_4_社を返す(client: TestClient, monkeypatch: pytest.Monke
 
     providers = client.get("/api/llm/health").json()["providers"]
 
+    # 並びは実装済みかどうかに依らず DISPLAY_ORDER で固定される
     assert [p["vendor"] for p in providers] == ["openai", "anthropic", "google", "xai"]
 
 
