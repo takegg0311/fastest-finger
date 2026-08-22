@@ -284,3 +284,33 @@ class TestLogEndpoint:
         )
 
         assert response.status_code == 422
+
+    def test_書き込みに失敗したら_500(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """記録の失敗は 200 + ok:false ではなく 500 で返す。
+
+        predict が失敗しても 200 なのは、枠ごとの失敗が「画面に出す観測結果」
+        だからである。一方こちらは、その送信ぶんが CSV に残らなかったという
+        事実であり、成功と同じ 200 で返すと画面が取りこぼしに気づけない。
+        """
+        # 記録先をディレクトリにして、書き込みを OSError で失敗させる
+        blocked = tmp_path / "predictions.csv"
+        blocked.mkdir(parents=True)
+        monkeypatch.setenv("LLM_POC_LOG_PATH", str(blocked))
+
+        app = FastAPI()
+        app.include_router(router)
+
+        with TestClient(app, raise_server_exceptions=False) as client:
+            response = client.post(
+                "/api/llm/log",
+                json={
+                    "question_text": "世界で一番高い山は？",
+                    "complete": True,
+                    "expected_answer": "エベレスト",
+                    "records": [{"vendor": "openai", "model": "gpt-5"}],
+                },
+            )
+
+        assert response.status_code == 500

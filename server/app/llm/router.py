@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from .base import ProviderError
@@ -147,8 +147,10 @@ class LogRequest(BaseModel):
 async def log(request: LogRequest) -> dict[str, object]:
     """予測結果を CSV へ追記する。
 
-    記録に失敗しても実験そのものは続けられるため、画面側は結果を見て
-    メッセージを出すだけでよい。ここでは書けたかどうかを返す。
+    predict と違い、失敗は HTTP 500 で返す。predict が 200 のままなのは
+    枠ごとの失敗が「画面に出す観測結果」だからだが、記録の失敗は観測結果では
+    なく、その送信ぶんが CSV に残らなかったという事実である。
+    成功と同じ 200 で返すと、画面が取りこぼしに気づけない。
     """
     records = [
         LogRecord(
@@ -173,7 +175,10 @@ async def log(request: LogRequest) -> dict[str, object]:
             records=records,
         )
     except OSError as error:
-        return {"ok": False, "error": f"記録先へ書き込めませんでした: {error}"}
+        raise HTTPException(
+            status_code=500,
+            detail=f"記録先へ書き込めませんでした: {error}",
+        ) from error
 
     return {"ok": True, "written": written}
 

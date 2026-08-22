@@ -71,6 +71,18 @@ export async function appendLog(payload: LogPayload): Promise<string | null> {
     if (!response.ok) {
       return `記録に失敗しました（HTTP ${response.status}）`;
     }
+
+    // HTTP ステータスだけでは足りない。サーバが 200 のまま ok: false を
+    // 返す実装へ戻った場合に、取りこぼしを成功として扱ってしまうため、
+    // 本文も確認する。
+    const body: unknown = await response.json();
+    if (typeof body === 'object' && body !== null) {
+      const data = body as Record<string, unknown>;
+      if (data.ok === false) {
+        return typeof data.error === 'string' ? data.error : '記録に失敗しました';
+      }
+    }
+
     return null;
   } catch (reason: unknown) {
     return reason instanceof Error ? reason.message : String(reason);
