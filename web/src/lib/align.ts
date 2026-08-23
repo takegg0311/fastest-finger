@@ -16,8 +16,12 @@
  * 少ない側の個数へ統合してから対応付ける（mergeSegments / mergeTextChunks を参照）。
  *
  * より高精度な方式（読み仮名を付与して音素列とアライメント）へ差し替えられるよう、
- * 同期ロジックはこのモジュールに閉じ込めてある。外部へ公開するのは buildAlignment と
- * visibleLength のみで、この 2 つの契約さえ保てば内部方式は入れ替えられる。
+ * 同期ロジックはこのモジュールに閉じ込めてある。公開するのは Alignment を組み立てる
+ * buildAlignment / buildUniformAlignment と、それを読む visibleLength / visibleText /
+ * alignmentDuration だけで、この契約さえ保てば内部方式は入れ替えられる。
+ *
+ * buildUniformAlignment は音声を持たない問題のための合成である。音声の有無で
+ * 表示ロジックを分けないよう、等速の Alignment を作って同じ経路に乗せる。
  */
 import type { LabFile, SpeechSegment } from './lab';
 
