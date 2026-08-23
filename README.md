@@ -86,5 +86,8 @@ cd server && uv sync && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 `--workers` は増やさないこと。ルームの状態はプロセス内のメモリに持つ。
 
+問題は VOICEPEAK の音声（`.wav` / `.txt` / `.lab`）が無くても、`questions.csv` に
+行を足すだけで出題できる（読み上げなし・1 文字ずつ等速の文字送りになる）。
+
 問題データの形式は [docs/quiz-data.md](docs/quiz-data.md)。
 開催手順・開発時の起動は [docs/online.md](docs/online.md)。

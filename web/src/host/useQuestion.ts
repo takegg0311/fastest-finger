@@ -7,7 +7,7 @@
  * 精度が落ちるだけで得るものが無い。
  */
 import { useEffect, useState } from 'react';
-import { buildAlignment, type Alignment } from '../lib/align';
+import { buildAlignment, buildUniformAlignment, type Alignment } from '../lib/align';
 import { parseLab } from '../lib/lab';
 import type { QuestionView } from '../protocol';
 
@@ -20,7 +20,8 @@ import type { QuestionView } from '../protocol';
 export type LoadedQuestion = {
   id: string;
   text: string;
-  audioUrl: string;
+  /** 音声なし問題では null。呼び出し側は <audio> を使わず時計で送る */
+  audioUrl: string | null;
   alignment: Alignment;
 };
 
@@ -31,8 +32,20 @@ export function useQuestion(question: QuestionView | null): LoadedQuestion | nul
   const labUrl = question?.lab_url ?? null;
 
   useEffect(() => {
-    if (question === null || labUrl === null) {
+    if (question === null) {
       setLoaded(null);
+      return;
+    }
+
+    // 音声なし問題。.lab の取得を挟まず、等速のアライメントを合成する
+    if (labUrl === null || question.audio_url === null) {
+      const text = question.text.trim();
+      setLoaded({
+        id: question.id,
+        text,
+        audioUrl: null,
+        alignment: buildUniformAlignment(text, question.char_interval_ms),
+      });
       return;
     }
 
@@ -57,7 +70,8 @@ export function useQuestion(question: QuestionView | null): LoadedQuestion | nul
         if (cancelled) return;
         console.warn('[host] 音素ラベルを読み込めませんでした', reason);
         // ラベルが無くても出題は止めない。chunks が空だと visibleLength は
-        // 常に 0 を返すので、呼び出し側で全文表示に切り替える（hasAlignment）
+        // 常に 0 を返すので、呼び出し側で全文表示に切り替える（hasAlignment）。
+        // 音声そのものは鳴らせるので audioUrl は保つ。
         const text = question.text.trim();
         setLoaded({
           id: question.id,

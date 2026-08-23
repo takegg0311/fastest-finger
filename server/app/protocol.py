@@ -49,8 +49,14 @@ class QuestionView(BaseModel):
 
     id: str
     text: str
-    audio_url: str
-    lab_url: str
+    # 音声なし問題では None。フロントは読み上げを鳴らさず、
+    # char_interval_ms の間隔で 1 文字ずつ問題文を送る。
+    audio_url: str | None = None
+    lab_url: str | None = None
+    # 音声なし問題の文字送り間隔（ミリ秒/文字）。
+    # 音声あり問題では .lab に従うため使わない。
+    # サーバが持つのは、出題者フロントを開き直しても設定が変わらないようにするため。
+    char_interval_ms: int
     # 正解と別解。投影は参加者も見るため、正解を出してよい phase
     # （check / timeUp / result）でのみ値が入る。それ以外は None。
     answers: list[str] | None = None
