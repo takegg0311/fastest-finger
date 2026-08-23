@@ -41,7 +41,7 @@ from .protocol import (
     QuestionView,
     RoomStateMessage,
 )
-from .quiz import Question, pick_random
+from .quiz import Question, char_interval_ms, pick_random
 
 # 投影画面のレイアウトが崩れない範囲に切る
 MAX_NAME_LENGTH = 12
@@ -317,8 +317,10 @@ class Room:
             question_view = QuestionView(
                 id=self.question.id,
                 text=self.question.text,
+                # 音声なし問題では None になる。フロントは等速の文字送りへ切り替える
                 audio_url=self.question.audio_url(),
                 lab_url=self.question.lab_url(),
+                char_interval_ms=char_interval_ms(),
                 # 正解は投影に出してよい phase でのみ載せる。
                 # 出題者フロントに渡した時点で投影に映りうるので、
                 # 表示するかどうかの判断をフロントに委ねず、ここで落とす。

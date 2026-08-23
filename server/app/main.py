@@ -149,6 +149,7 @@ async def list_questions() -> list[dict[str, object]]:
             "answers": question.answers,
             "audio_url": question.audio_url(),
             "lab_url": question.lab_url(),
+            "has_audio": question.has_audio,
         }
         for question in questions
     ]

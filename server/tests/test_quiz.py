@@ -8,6 +8,7 @@ import pytest
 
 from app.quiz import (
     QuizDataError,
+    char_interval_ms,
     load_questions,
     pick_random,
     question_file_path,
@@ -136,11 +137,66 @@ def test_問題文に改行があればエラー(tmp_path: Path) -> None:
         load_questions(tmp_path)
 
 
-def test_音声ファイルが無ければエラー(tmp_path: Path) -> None:
+def test_音声ファイルが無ければ音声なし問題になる(tmp_path: Path) -> None:
+    """3 点とも無いのはエラーではない。CSV だけで出題できる。"""
     write_quiz_data(tmp_path, "20260820,0,問題,答え,\n")
 
-    with pytest.raises(QuizDataError, match=r"20260820/0-20260820\.wav が見つかりません"):
+    questions = load_questions(tmp_path)
+
+    assert len(questions) == 1
+    assert questions[0].has_audio is False
+    assert questions[0].wav is None
+    assert questions[0].lab is None
+    assert questions[0].audio_url() is None
+    assert questions[0].lab_url() is None
+    # 問題文と正解は CSV から取れている
+    assert questions[0].text == "問題"
+    assert questions[0].answers == ["答え"]
+
+
+def test_音声が一部だけあればエラー(tmp_path: Path) -> None:
+    """置き忘れ・置き間違いを検出する。黙って音声なしへ倒さない。
+
+    ここを緩めると、音声を用意したはずの問題が無音で出題され、
+    本番で初めて気づくことになる。
+    """
+    (tmp_path / "20260820").mkdir(parents=True)
+    (tmp_path / question_file_path("20260820", 0, ".wav")).write_bytes(b"")
+    write_quiz_data(tmp_path, "20260820,0,問題,答え,\n")
+
+    with pytest.raises(QuizDataError, match=r"音声ファイルが揃っていません"):
         load_questions(tmp_path)
+
+
+def test_一部だけある場合は欠けている拡張子を挙げる(tmp_path: Path) -> None:
+    (tmp_path / "20260820").mkdir(parents=True)
+    (tmp_path / question_file_path("20260820", 0, ".wav")).write_bytes(b"")
+    write_quiz_data(tmp_path, "20260820,0,問題,答え,\n")
+
+    with pytest.raises(QuizDataError) as error:
+        load_questions(tmp_path)
+
+    message = str(error.value)
+    assert "2 行目" in message
+    assert ".txt" in message
+    assert ".lab" in message
+
+
+def test_音声ありとなしが混在できる(tmp_path: Path) -> None:
+    """同じ CSV に両方を並べられる。"""
+    make_question_files(tmp_path, "20260820", 0, "音声あり問題", width=2)
+    make_question_files(tmp_path, "20260820", 1, "これも音声あり", width=2)
+    write_quiz_data(
+        tmp_path,
+        "20260820,0,音声あり問題,答え1,\n"
+        "20260820,1,これも音声あり,答え2,\n"
+        "csvonly,0,音声なし問題,答え3,\n",
+    )
+
+    questions = load_questions(tmp_path)
+
+    assert len(questions) == 3
+    assert [q.has_audio for q in questions] == [True, True, False]
 
 
 def test_txt_と一致しなければエラー(tmp_path: Path) -> None:
@@ -325,6 +381,65 @@ class TestZeroPadding:
 
         assert len(questions) == 9
         assert questions[0].wav == "20260821/00-20260821.wav"
+
+
+    def test_音声なし問題が既存の桁数を狂わせない(self, tmp_path: Path) -> None:
+        """音声なし問題を既存バッチに足しても、音声ありが見失われない。
+
+        seq_width はバッチ内の連番の最大値から桁数を決めるため、大きな seq の
+        音声なし問題を足すと想定桁数が増える。探索側で複数桁を試すことで、
+        既存の音声あり問題（2 桁で置かれている）が引き続き見つかる。
+        """
+        # 0〜9 の 10 問を 2 桁で置く
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+
+        rows = "".join(f"20260821,{seq},問題{seq},答え{seq},\n" for seq in range(10))
+        # seq=100 の音声なし問題を足す。これで seq_width は 3 桁を返す
+        rows += "20260821,100,音声なし問題,答え100,\n"
+        write_quiz_data(tmp_path, rows)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 11
+        # 既存の 10 問は音声つきのまま見つかる
+        assert all(q.has_audio for q in questions[:10])
+        # 足した 1 問だけが音声なし
+        assert questions[10].has_audio is False
+        assert questions[10].seq == 100
+
+    def test_音声なし問題を別バッチに置いても混ざらない(self, tmp_path: Path) -> None:
+        """推奨する運用（別バッチに置く）でも正しく判定される。"""
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+
+        rows = "".join(f"20260821,{seq},問題{seq},答え{seq},\n" for seq in range(10))
+        rows += "csvonly,0,音声なし問題,答え,\n"
+        write_quiz_data(tmp_path, rows)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 11
+        assert all(q.has_audio for q in questions[:10])
+        assert questions[10].has_audio is False
+
+
+class TestCharInterval:
+    """音声なし問題の文字送り間隔。"""
+
+    def test_既定は_120ms(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("QUIZ_CHAR_INTERVAL_MS", raising=False)
+        assert char_interval_ms() == 120
+
+    def test_環境変数で変更できる(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setenv("QUIZ_CHAR_INTERVAL_MS", "300")
+        assert char_interval_ms() == 300
+
+    @pytest.mark.parametrize("value", ["", "abc", "0", "-1"])
+    def test_不正な値は既定へ落ちる(self, value: str, monkeypatch: pytest.MonkeyPatch) -> None:
+        """出題を止めるほどの問題ではないため、エラーにせず既定値を使う。"""
+        monkeypatch.setenv("QUIZ_CHAR_INTERVAL_MS", value)
+        assert char_interval_ms() == 120
 
 
 class TestExtraFiles:
