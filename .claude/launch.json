@@ -2,7 +2,7 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "fastest-finger-poc",
+      "name": "trans-ai-quiz-poc",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
@@ -17,7 +17,7 @@
       "port": 5273
     },
     {
-      "name": "fastest-finger-web",
+      "name": "trans-ai-quiz-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",
@@ -32,7 +32,7 @@
       "port": 5274
     },
     {
-      "name": "fastest-finger-llm-poc",
+      "name": "trans-ai-quiz-llm-poc",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "run",

@@ -386,7 +386,7 @@ wheels = [
 ]
 
 [[package]]
-name = "fastest-finger-server"
+name = "trans-ai-quiz-server"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

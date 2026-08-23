@@ -10,7 +10,7 @@ export const MAX_SLOTS = 4;
 
 // 既存 PoC（poc/）とは別のキーにする。同じホスト（localhost）で動くため、
 // 共有すると片方の枠選択がもう片方に引きずられる。
-const STORAGE_KEY = 'fastest-finger:llm-poc:slots';
+const STORAGE_KEY = 'trans-ai-quiz:llm-poc:slots';
 
 export type SlotSelection = {
   /** 未選択なら null。枠は残したまま使わない状態にできる */

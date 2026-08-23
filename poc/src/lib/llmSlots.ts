@@ -7,7 +7,7 @@ import type { ProviderInfo } from './llm';
 
 export const MAX_SLOTS = 4;
 
-const STORAGE_KEY = 'fastest-finger:llm-slots';
+const STORAGE_KEY = 'trans-ai-quiz:llm-slots';
 
 export type SlotSelection = {
   /** 未選択なら null。枠は残したまま使わない状態にできる */

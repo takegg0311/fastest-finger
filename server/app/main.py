@@ -103,7 +103,7 @@ def _current_port() -> int:
     return 8000
 
 
-app = FastAPI(title="fastest-finger", lifespan=lifespan)
+app = FastAPI(title="trans-ai-quiz", lifespan=lifespan)
 app.state.questions, app.state.quiz_error = _load_questions_or_warn()
 app.state.host_token = HOST_TOKEN
 # ルーム状態はプロセス内のメモリに持つ。--workers は 1 固定であること。
