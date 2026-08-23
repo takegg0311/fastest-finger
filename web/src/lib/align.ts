@@ -255,6 +255,56 @@ function distributeChars(
 }
 
 /**
+ * 音声を持たない問題のアライメントを組み立てる。
+ *
+ * 全文を 1 チャンク・1 パートとし、時間幅を「文字数 × 1 文字あたりの間隔」に取る。
+ * これで visibleLength は経過時間に対して 1 文字ずつ等速に文字数を返す。
+ *
+ * 表示ロジックを音声あり/なしで二重化しないための合成である。visibleLength は
+ * 「時刻 → 表示文字数」の純粋関数なので、Alignment さえ作れば呼び出し側は
+ * 音声の有無を意識しなくてよい。専用の描画経路を作ると、freeze() による
+ * 途中停止・全文表示・早押し時の文字数確定をすべて二重に実装することになる。
+ *
+ * 句読点でのウェイトは入れない。まず単純な等速で実用に足りるかを見る。
+ */
+export function buildUniformAlignment(text: string, charIntervalMs: number): Alignment {
+  const normalizedText = text.trim();
+  const charCount = [...normalizedText].length;
+
+  if (charCount === 0) {
+    return { text: normalizedText, chunks: [] };
+  }
+
+  // 間隔が不正でも表示は止めない。既定値へ落として送り続ける
+  const interval = charIntervalMs > 0 ? charIntervalMs : DEFAULT_CHAR_INTERVAL_MS;
+  const end = (charCount * interval) / 1000;
+
+  return {
+    text: normalizedText,
+    chunks: [
+      {
+        start: 0,
+        end,
+        charStart: 0,
+        charEnd: charCount,
+        parts: [{ start: 0, end, charStart: 0, charEnd: charCount }],
+      },
+    ],
+  };
+}
+
+/** サーバから間隔が届かなかった場合の既定値（ミリ秒/文字） */
+const DEFAULT_CHAR_INTERVAL_MS = 120;
+
+/**
+ * アライメントの終端時刻（秒）。音声なし問題で「読み切った」判定に使う。
+ * 音声ありでは <audio> の ended を使うため呼ばない。
+ */
+export function alignmentDuration(alignment: Alignment): number {
+  return alignment.chunks.at(-1)?.end ?? 0;
+}
+
+/**
  * 再生位置 currentTime（秒）において表示すべき文字数を返す。
  *
  * 無音区間にいる場合は、直前に読み終えた位置を保つ。文字だけが先に進んで

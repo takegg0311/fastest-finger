@@ -41,8 +41,14 @@ export type BuzzedView = {
 export type QuestionView = {
   id: string;
   text: string;
-  audio_url: string;
-  lab_url: string;
+  /**
+   * 音声なし問題では null。読み上げを鳴らさず、char_interval_ms の
+   * 間隔で 1 文字ずつ問題文を送る。
+   */
+  audio_url: string | null;
+  lab_url: string | null;
+  /** 音声なし問題の文字送り間隔（ミリ秒/文字） */
+  char_interval_ms: number;
   /**
    * 正解と別解。投影は参加者も見るため、正解を出してよい phase
    * （check / timeUp / result）でのみ値が入る。それ以外は null。

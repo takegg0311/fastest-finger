@@ -5,7 +5,7 @@
  * 出題者の操作が起点になるので、ブラウザの自動再生ポリシーにも掛からない。
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { visibleLength } from '../lib/align';
+import { alignmentDuration, visibleLength } from '../lib/align';
 import { playJingle } from '../lib/sound';
 import { useConnection } from '../lib/useConnection';
 import type { ClientMessage, RoomStateMessage, ServerMessage } from '../protocol';
@@ -32,6 +32,19 @@ export function App() {
   const frameRef = useRef<number | null>(null);
   const hostToken = useRef(hostTokenFromUrl());
 
+  /**
+   * 音声なし問題の時計。
+   *
+   * <audio> が無いので currentTime を持てない。performance.now() を基準に、
+   * 「開始時刻」と「停止時点までの経過秒」から現在位置を求める。
+   * startedAt が null の間は止まっている（お手つき解除で再開できるよう、
+   * 経過秒は保持したままにする）。
+   */
+  const silentClockRef = useRef<{ startedAt: number | null; elapsed: number }>({
+    startedAt: null,
+    elapsed: 0,
+  });
+
   const question = useQuestion(state?.question ?? null);
 
   // 停止処理から参照するため、最新値を ref に持つ
@@ -47,18 +60,54 @@ export function App() {
     }
   }, []);
 
+  /**
+   * 現在の再生位置（秒）。音声の有無で供給元が変わる。
+   *
+   * rAF 追跡・freeze()・読み切り判定はすべてこれを経由する。
+   * 音声ありは <audio> の currentTime、音声なしは performance.now() 基準の経過秒。
+   */
+  const currentPosition = useCallback((): number => {
+    const loaded = questionRef.current;
+    if (loaded !== null && loaded.audioUrl === null) {
+      const clock = silentClockRef.current;
+      if (clock.startedAt === null) return clock.elapsed;
+      return clock.elapsed + (performance.now() - clock.startedAt) / 1000;
+    }
+    return audioRef.current?.currentTime ?? 0;
+  }, []);
+
+  /** 音声なしの時計を先頭から動かす */
+  const startSilentClock = useCallback(() => {
+    silentClockRef.current = { startedAt: performance.now(), elapsed: 0 };
+  }, []);
+
+  /** 音声なしの時計を止める。経過秒は保持し、続きから再開できるようにする */
+  const pauseSilentClock = useCallback(() => {
+    const clock = silentClockRef.current;
+    if (clock.startedAt === null) return;
+    clock.elapsed += (performance.now() - clock.startedAt) / 1000;
+    clock.startedAt = null;
+  }, []);
+
+  /** 音声なしの時計を、止めた位置から再開する */
+  const resumeSilentClock = useCallback(() => {
+    const clock = silentClockRef.current;
+    if (clock.startedAt !== null) return;
+    clock.startedAt = performance.now();
+  }, []);
+
   /** 音声と文字送りをその場で止める */
   const freeze = useCallback(() => {
     const audio = audioRef.current;
     const loaded = questionRef.current;
     frozenRef.current = true;
     audio?.pause();
+    pauseSilentClock();
     stopTracking();
 
     if (loaded === null) return;
-    const at = audio?.currentTime ?? 0;
-    setFrozenLength(visibleLength(loaded.alignment, at));
-  }, [stopTracking]);
+    setFrozenLength(visibleLength(loaded.alignment, currentPosition()));
+  }, [stopTracking, pauseSilentClock, currentPosition]);
 
   const handleOpen = useCallback((send: (message: ClientMessage) => void) => {
     send({ type: 'host_hello', host_token: hostToken.current });
@@ -91,29 +140,41 @@ export function App() {
   const phase = state?.phase ?? 'idle';
   const roundId = state?.round_id ?? 0;
 
-  // 新しい問題が読み込まれたら、ジングルを鳴らしてから音声を再生する
+  // 新しい問題が読み込まれたら、ジングルを鳴らしてから読み上げを始める
   const questionId = question?.id ?? null;
   useEffect(() => {
     if (question === null || phase !== 'reading') return;
-    // 解除で戻ってきた場合は続きから鳴らすため、先頭に戻すのは新しい問題のときだけ
+
+    const silent = question.audioUrl === null;
     const audio = audioRef.current;
-    if (audio === null) return;
+    // 音声あり問題で <audio> がまだ無いなら、次のレンダリングを待つ。
+    // 音声なしでは要素自体を描画しないので、null でも進める
+    if (!silent && audio === null) return;
 
     let cancelled = false;
 
     // 前問で確定した表示文字数はここで捨てる。ジングルの再生完了を待ってから
     // 捨てると、その間ずっと前問の文字数で固定されたままになり、
-    // 問題音声が始まっても文字送りが動かない。
-    audio.currentTime = 0;
+    // 読み上げが始まっても文字送りが動かない。
+    if (audio !== null) audio.currentTime = 0;
     setCurrentTime(0);
     setFrozenLength(null);
     frozenRef.current = false;
+    silentClockRef.current = { startedAt: null, elapsed: 0 };
 
     void (async () => {
+      // ジングルは音声の有無に関わらず鳴らす。問題の読み上げ音声とは別物で、
+      // 早押しのフィードバックとして要るため
       await playJingle('set');
-      // ジングルの間に押されていたら鳴らし始めない。
+      // ジングルの間に押されていたら始めない。
       // サーバは start_question の時点で早押しを受け付けている
       if (cancelled || frozenRef.current) return;
+
+      if (silent) {
+        startSilentClock();
+        return;
+      }
+      if (audio === null) return;
 
       audio.currentTime = 0;
       await audio.play().catch((reason: unknown) => {
@@ -130,7 +191,7 @@ export function App() {
     // questionId も依存に残すのは、出題直後はまだ .lab の取得中で
     // question が null のことがあり、その回の effect は何もせず抜けるため。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [roundId, questionId]);
+  }, [roundId, questionId, startSilentClock]);
 
   // reading の間だけ再生位置を追い続ける
   useEffect(() => {
@@ -138,9 +199,22 @@ export function App() {
 
     const audio = audioRef.current;
 
+    const silent = question.audioUrl === null;
+    const duration = alignmentDuration(question.alignment);
+
     const tick = () => {
-      const current = audioRef.current;
-      if (current !== null) setCurrentTime(current.currentTime);
+      const at = currentPosition();
+      setCurrentTime(at);
+
+      // 音声なしは <audio> の ended が無いので、終端到達を自分で見る
+      if (silent && duration > 0 && at >= duration) {
+        stopTracking();
+        pauseSilentClock();
+        setFrozenLength([...question.text].length);
+        send({ type: 'reading_ended', round_id: roundId });
+        return;
+      }
+
       frameRef.current = requestAnimationFrame(tick);
     };
     frameRef.current = requestAnimationFrame(tick);
@@ -159,20 +233,40 @@ export function App() {
       stopTracking();
       audio?.removeEventListener('timeupdate', handleTimeUpdate);
     };
-  }, [phase, question, stopTracking]);
+  }, [
+    phase,
+    question,
+    roundId,
+    send,
+    stopTracking,
+    currentPosition,
+    pauseSilentClock,
+  ]);
 
   /** お手つき解除で reading へ戻ったら、続きから再生する */
   useEffect(() => {
     if (phase !== 'reading') return;
+    if (frozenLength === null) return;
+
+    const loaded = questionRef.current;
+    if (loaded !== null && loaded.audioUrl === null) {
+      // 時計を先に動かしてから frozenLength を外す。順序が逆だと、
+      // 追跡が再開するまでの 1 フレーム、currentTime が前問の値
+      // （出題時に 0 へ戻したまま）で描画され、表示が一瞬巻き戻る。
+      resumeSilentClock();
+      setCurrentTime(currentPosition());
+      setFrozenLength(null);
+      return;
+    }
+
     const audio = audioRef.current;
     if (audio === null || audio.paused === false) return;
-    if (frozenLength === null) return;
 
     setFrozenLength(null);
     void audio.play().catch(() => undefined);
     // 解除のときだけ動かしたいので frozenLength は依存に含めない
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, roundId]);
+  }, [phase, roundId, resumeSilentClock, currentPosition]);
 
   /** 押されないまま読み切った */
   const handleAudioEnded = useCallback(() => {
@@ -231,7 +325,7 @@ export function App() {
 
   return (
     <main className="host">
-      {question !== null && (
+      {question !== null && question.audioUrl !== null && (
         <audio
           ref={audioRef}
           src={question.audioUrl}
