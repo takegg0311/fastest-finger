@@ -152,26 +152,60 @@ def _find_audio_paths(
 
     「音声なしかどうか」は桁数が決まらないとファイル名を組み立てられないため
     判定できず、桁数の算出側で音声なし問題を除外する順序では解けない（循環する）。
-    そこで探索側で複数の桁数を試し、どれでも見つからないときに音声なしと判定する。
+    そこで探索側で複数の桁数を試し、どれでも 3 点セットが見つからないときに
+    音声なしと判定する。
     """
-    for candidate in (width, *(w for w in CANDIDATE_WIDTHS if w != width)):
-        found: dict[str, str] = {}
-        missing: list[str] = []
+    at_width = _probe_width(batch, seq, quiz_data_dir, width)
 
-        for ext in AUDIO_EXTENSIONS:
-            relative_path = question_file_path(batch, seq, ext, candidate)
-            if (quiz_data_dir / relative_path).exists():
-                found[ext] = relative_path
-            else:
-                missing.append(ext)
+    # 想定桁に 1 つでもあれば、その結果をそのまま返す。想定桁は本来ファイルが
+    # 置かれるべき場所なので、そこに一部だけあるなら置き忘れとみなす。
+    # ここで他の桁へ逃がすと、置き忘れの検出が甘くなる。
+    if at_width[0]:
+        return at_width
 
-        # 1 つでも見つかった桁数を採用する。部分的に欠けている場合は
-        # 置き忘れとして報告したいので、その桁数での結果をそのまま返す。
-        if found:
+    # 想定桁が空の場合だけ、他の桁を見る。桁数が変わったのは音声なし問題が
+    # バッチの連番の最大値を押し上げたためで、実ファイルは以前の桁数のまま
+    # 置かれている可能性がある。
+    #
+    # ここでは 3 点揃いを優先する。1 つでも見つかった桁を採る方式だと、
+    # 古い桁数で作ったファイルの残骸（9 問時代の `0-...wav` など）が
+    # 揃っている側より先に当たり、実際には揃っているのに一部欠けとして
+    # 弾いてしまう。
+    partial: tuple[dict[str, str], list[str]] | None = None
+
+    for candidate in CANDIDATE_WIDTHS:
+        if candidate == width:
+            continue
+
+        found, missing = _probe_width(batch, seq, quiz_data_dir, candidate)
+        if found and not missing:
             return found, missing
+        # 一部だけある桁は、3 点揃いが他に無かった場合に報告する
+        if found and partial is None:
+            partial = (found, missing)
+
+    if partial is not None:
+        return partial
 
     # どの桁数でも 1 つも見つからなかった = 音声なし問題
     return {}, list(AUDIO_EXTENSIONS)
+
+
+def _probe_width(
+    batch: str, seq: int, quiz_data_dir: Path, width: int
+) -> tuple[dict[str, str], list[str]]:
+    """指定した桁数で 1 問分のファイルを探す。"""
+    found: dict[str, str] = {}
+    missing: list[str] = []
+
+    for ext in AUDIO_EXTENSIONS:
+        relative_path = question_file_path(batch, seq, ext, width)
+        if (quiz_data_dir / relative_path).exists():
+            found[ext] = relative_path
+        else:
+            missing.append(ext)
+
+    return found, missing
 
 
 def _validate_row(

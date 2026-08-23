@@ -408,6 +408,58 @@ class TestZeroPadding:
         assert questions[10].has_audio is False
         assert questions[10].seq == 100
 
+    def test_古い桁数の残骸があっても揃っている側を選ぶ(self, tmp_path: Path) -> None:
+        """9 問時代の 1 桁ファイルが残っていても、2 桁の 3 点セットを採用する。
+
+        バッチを 9 問から増やすと、実ファイルの桁数は 1 桁から 2 桁へ変わる。
+        古い出力を消し忘れると 1 桁のファイルが残る。ここで「1 つでも
+        見つかった桁を採用する」方式だと、残骸が揃っている側より先に当たり、
+        実際には揃っているのに一部欠けとして弾いてしまう。
+        """
+        for seq in range(10):
+            make_question_files(tmp_path, "20260821", seq, f"問題{seq}", width=2)
+
+        # 9 問時代の名残。.wav だけが 1 桁で残っている
+        (tmp_path / question_file_path("20260821", 0, ".wav", 1)).write_bytes(b"")
+
+        rows = "".join(f"20260821,{seq},問題{seq},答え{seq},\n" for seq in range(10))
+        # seq=100 を足して想定桁を 3 にする（探索順が 3 → 1 → 2 になる）
+        rows += "20260821,100,音声なし問題,答え100,\n"
+        write_quiz_data(tmp_path, rows)
+
+        questions = load_questions(tmp_path)
+
+        assert len(questions) == 11
+        # 残骸に引きずられず、2 桁の 3 点セットが選ばれる
+        assert questions[0].has_audio is True
+        assert questions[0].wav == question_file_path("20260821", 0, ".wav", 2)
+        assert questions[10].has_audio is False
+
+    def test_他の桁数に一部だけあればエラー(self, tmp_path: Path) -> None:
+        """3 点揃いがどの桁にも無く、一部だけある場合は置き忘れとして報告する。"""
+        (tmp_path / "20260821").mkdir(parents=True)
+        # 想定桁は 1 だが、2 桁側に .wav だけ置く
+        (tmp_path / question_file_path("20260821", 0, ".wav", 2)).write_bytes(b"")
+        write_quiz_data(tmp_path, "20260821,0,問題,答え,\n")
+
+        with pytest.raises(QuizDataError, match=r"音声ファイルが揃っていません"):
+            load_questions(tmp_path)
+
+    def test_想定桁に一部あれば他の桁へ逃がさない(self, tmp_path: Path) -> None:
+        """想定桁は本来の置き場所。そこに一部だけあるなら置き忘れとみなす。
+
+        ここで他の桁を探しに行くと、置き忘れの検出が甘くなる。
+        """
+        (tmp_path / "20260821").mkdir(parents=True)
+        # 想定桁（1 桁）に .wav だけ、2 桁側には 3 点すべて置く
+        (tmp_path / question_file_path("20260821", 0, ".wav", 1)).write_bytes(b"")
+        make_question_files(tmp_path, "20260821", 0, "問題", width=2)
+        write_quiz_data(tmp_path, "20260821,0,問題,答え,\n")
+
+        # 2 桁側が揃っていても、想定桁の欠けを優先して報告する
+        with pytest.raises(QuizDataError, match=r"音声ファイルが揃っていません"):
+            load_questions(tmp_path)
+
     def test_音声なし問題を別バッチに置いても混ざらない(self, tmp_path: Path) -> None:
         """推奨する運用（別バッチに置く）でも正しく判定される。"""
         for seq in range(10):
