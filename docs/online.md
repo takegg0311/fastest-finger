@@ -38,6 +38,19 @@ cd server && uv sync && uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 > [!IMPORTANT]
 > `--workers` は増やさないこと。ルームの状態はプロセス内のメモリに持つため、ワーカーが 2 つ以上あると参加者ごとに別の状態を見ることになる。
 
+### 環境変数
+
+| 環境変数 | 用途 |
+| --- | --- |
+| `QUIZ_CHAR_INTERVAL_MS` | 音声なし問題の文字送り間隔（ミリ秒/文字、既定 120） |
+
+```bash
+QUIZ_CHAR_INTERVAL_MS=300 uv run uvicorn app.main:app --port 8000
+```
+
+音声なし問題については[出題データ](quiz-data.md#音声なしで出題する)を参照。
+LLM 予測に関する環境変数は [LLM 予測](llm.md)にある。
+
 ## 開発時
 
 バックエンドとフロントを別々に動かす。
