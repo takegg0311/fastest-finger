@@ -17,8 +17,8 @@ import { BuzzButton } from './BuzzButton';
 import { NameForm } from './NameForm';
 
 /** リロードしても同じ参加者として復帰するために保存する */
-const TOKEN_KEY = 'fastest-finger.player-token';
-const NAME_KEY = 'fastest-finger.player-name';
+const TOKEN_KEY = 'trans-ai-quiz.player-token';
+const NAME_KEY = 'trans-ai-quiz.player-name';
 
 export function App() {
   const [name, setName] = useState(() => localStorage.getItem(NAME_KEY) ?? '');
