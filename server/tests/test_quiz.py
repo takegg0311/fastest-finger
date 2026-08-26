@@ -342,6 +342,26 @@ class TestQuestionShuffler:
         # 山は減らさない
         assert shuffler.remaining == 5
 
+    def test_一巡後に知らない問題を指定しても山を組み直さない(self) -> None:
+        """失敗した操作で残数だけが満数へ戻ると、出題していないのに一巡したように見える。"""
+        shuffler = QuestionShuffler(make_questions(5))
+        for _ in range(5):
+            shuffler.take()
+        assert shuffler.remaining == 0
+
+        assert shuffler.take("20260820/99") is None
+
+        assert shuffler.remaining == 0
+
+    def test_出題済みの問題を指定し直せる(self) -> None:
+        """指定は山の順序を無視して任意の問題を出すための操作。山の制約は受けない。"""
+        shuffler = QuestionShuffler(make_questions(5))
+        first = shuffler.take()
+
+        again = shuffler.take(first.id)
+
+        assert again.id == first.id
+
     def test_1_問しかなければ同じ問題を返し続ける(self) -> None:
         """候補が尽きるくらいなら同じ問題を返す。出題を止めないため。"""
         shuffler = QuestionShuffler(make_questions(1))

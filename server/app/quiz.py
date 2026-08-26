@@ -440,25 +440,31 @@ class QuestionShuffler:
 
         question_id を指定した場合はその問題を返し、山に残っていれば取り除く。
         取り除かないと、指定して出題した問題が後で山の順番どおりに再び出てくる。
+        指定は「山の順序を無視して任意の問題を出す」ための操作なので、
+        すでに出題済みの問題を指定し直すこともできる。
 
         山が空になったら組み直す。誤答でもスルーでも、一度取り出した問題は
         山へ戻さない。会場で読み上げられた時点で消費されているため。
+
+        知らない問題 ID を指定した場合は None を返し、山には手を付けない。
         """
         if not self._questions:
             return None
 
-        # 山を組み直すのは取り出しの直前だけにする。取り出した後に先回りして
-        # 組み直すと、最後の 1 問を出した時点で残数が満数に戻ってしまい、
-        # 「残り 0」が表示されないまま一巡が終わったように見える。
-        if not self._deck:
-            self._refill()
-
         if question_id is not None:
+            # 山に触れる前に問題を引き当てる。組み直しを先に置くと、知らない ID で
+            # 失敗したときに山だけが組み直され、出題していないのに残数が満数へ
+            # 戻ってしまう（失敗した操作が状態を変えることになる）。
             question = next((q for q in self._questions if q.id == question_id), None)
             if question is None:
                 return None
             self._deck = [q for q in self._deck if q.id != question_id]
         else:
+            # 山を組み直すのは取り出しの直前だけにする。取り出した後に先回りして
+            # 組み直すと、最後の 1 問を出した時点で残数が満数に戻ってしまい、
+            # 「残り 0」が表示されないまま一巡が終わったように見える。
+            if not self._deck:
+                self._refill()
             question = self._deck.pop()
 
         self._last_id = question.id
