@@ -135,6 +135,68 @@ class TestStartQuestion:
             assert following.id != first.id
             first = following
 
+    def test_一巡するまで再出題されない(self) -> None:
+        room = Room(questions=[make_question(seq) for seq in range(5)])
+
+        drawn = []
+        for _ in range(5):
+            question = room.start_question()
+            assert question is not None
+            drawn.append(question.id)
+            room.next_question()
+
+        assert len(set(drawn)) == 5
+
+    def test_誤答で終わった問題も再出題されない(self) -> None:
+        """会場で読み上げられた時点で消費されている。山へは戻さない。"""
+        room = Room(questions=[make_question(seq) for seq in range(5)])
+        room.join("たけ", None)
+        player_id = next(iter(room.players))
+
+        drawn = []
+        for _ in range(5):
+            question = room.start_question()
+            assert question is not None
+            drawn.append(question.id)
+
+            room.buzz(player_id, room.round_id)
+            room.check(room.round_id)
+            room.judge(room.round_id, correct=False)
+            room.next_question()
+
+        assert len(set(drawn)) == 5
+
+    def test_スルーで終わった問題も再出題されない(self) -> None:
+        room = Room(questions=[make_question(seq) for seq in range(5)])
+
+        drawn = []
+        for _ in range(5):
+            question = room.start_question()
+            assert question is not None
+            drawn.append(question.id)
+
+            room.reading_ended(room.round_id)
+            room.time_up(room.round_id)
+            room.judge(room.round_id, correct=False)
+            room.next_question()
+
+        assert len(set(drawn)) == 5
+
+    def test_指定して出した問題は同じ一巡で再出題されない(self) -> None:
+        room = Room(questions=[make_question(seq) for seq in range(5)])
+
+        room.start_question("20260820/3")
+        room.next_question()
+
+        rest = []
+        for _ in range(4):
+            question = room.start_question()
+            assert question is not None
+            rest.append(question.id)
+            room.next_question()
+
+        assert "20260820/3" not in rest
+
 
 class TestBuzz:
     def test_最初の一人だけが通る(self, started_room: Room) -> None:
@@ -490,3 +552,28 @@ class TestStateMessage:
         message = room.to_state_message(for_host=False)
 
         assert {player.name for player in message.players} == {"たけ (1)", "たけ (2)"}
+
+    def test_残数と全問数が載る(self, room: Room) -> None:
+        message = room.to_state_message(for_host=True)
+
+        assert message.total_questions == 2
+        assert message.remaining_questions == 2
+
+    def test_出題すると残数が減る(self, room: Room) -> None:
+        room.start_question()
+
+        message = room.to_state_message(for_host=True)
+
+        assert message.remaining_questions == 1
+        assert message.total_questions == 2
+
+    def test_一巡すると残数が戻る(self, room: Room) -> None:
+        for _ in range(2):
+            room.start_question()
+            room.next_question()
+        assert room.to_state_message(for_host=True).remaining_questions == 0
+
+        room.start_question()
+
+        # 組み直した 2 問から 1 問取った状態
+        assert room.to_state_message(for_host=True).remaining_questions == 1

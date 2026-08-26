@@ -41,7 +41,7 @@ from .protocol import (
     QuestionView,
     RoomStateMessage,
 )
-from .quiz import Question, char_interval_ms, pick_random
+from .quiz import Question, QuestionShuffler, char_interval_ms
 
 # 投影画面のレイアウトが崩れない範囲に切る
 MAX_NAME_LENGTH = 12
@@ -94,8 +94,12 @@ class Room:
     # token -> player_id。再接続の名寄せに使う
     _tokens: dict[str, str] = field(default_factory=dict)
     _next_player_number: int = 1
-    # 直前に出題した問題。同じ問題が連続しないようにするため
-    _last_question_id: str | None = None
+    # 出題の抽選器。全問を 1 つの山として持ち、一巡するまで再出題しない。
+    # 直前の問題の記憶もこの中にある
+    _shuffler: QuestionShuffler = field(init=False)
+
+    def __post_init__(self) -> None:
+        self._shuffler = QuestionShuffler(self.questions)
 
     # ------------------------------------------------------------ 参加者
 
@@ -162,10 +166,7 @@ class Room:
         「ジングル完了を待って reading にする」設計は往復が挟まる分だけ
         受付開始の境界が曖昧になる。
         """
-        if question_id is not None:
-            question = next((q for q in self.questions if q.id == question_id), None)
-        else:
-            question = pick_random(self.questions, exclude=self._last_question_id)
+        question = self._shuffler.take(question_id)
 
         if question is None:
             return None
@@ -175,7 +176,6 @@ class Room:
         self.question = question
         self.buzzed = None
         self.judgement = None
-        self._last_question_id = question.id
 
         # ラウンドが変わればお手つきは解除する
         for player in self.players.values():
@@ -353,4 +353,6 @@ class Room:
             buzzed=buzzed_view,
             question=question_view,
             judgement=self.judgement,
+            remaining_questions=self._shuffler.remaining,
+            total_questions=self._shuffler.total,
         )
