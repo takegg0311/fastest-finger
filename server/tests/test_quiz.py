@@ -7,10 +7,11 @@ from pathlib import Path
 import pytest
 
 from app.quiz import (
+    Question,
+    QuestionShuffler,
     QuizDataError,
     char_interval_ms,
     load_questions,
-    pick_random,
     question_file_path,
     seq_width,
 )
@@ -242,30 +243,139 @@ def test_エラーは行番号つきでまとめて報告される(tmp_path: Pat
     assert "4 行目: seq は 0 以上の整数" in message
 
 
-class TestPickRandom:
-    def test_空なら_none(self) -> None:
-        assert pick_random([]) is None
-
-    def test_1_問しかなければ_exclude_を無視する(self, tmp_path: Path) -> None:
-        """候補が尽きるくらいなら同じ問題を返す。出題を止めないため。"""
-        make_question_files(tmp_path, "20260820", 0, "問題")
-        write_quiz_data(tmp_path, "20260820,0,問題,答え,\n")
-        questions = load_questions(tmp_path)
-
-        assert pick_random(questions, exclude="20260820/0") is questions[0]
-
-    def test_直前の問題を除外する(self, tmp_path: Path) -> None:
-        for seq in range(2):
-            make_question_files(tmp_path, "20260820", seq, f"問題{seq}")
-        write_quiz_data(
-            tmp_path,
-            "20260820,0,問題0,答え0,\n20260820,1,問題1,答え1,\n",
+def make_questions(count: int) -> list[Question]:
+    """抽選のテスト用。ファイル検証を通さず Question を直接組む。"""
+    return [
+        Question(
+            id=f"20260820/{seq}",
+            batch="20260820",
+            seq=seq,
+            wav=None,
+            txt=None,
+            lab=None,
+            text=f"問題{seq}",
+            answers=[f"答え{seq}"],
         )
-        questions = load_questions(tmp_path)
+        for seq in range(count)
+    ]
 
-        # 乱数に依存するため繰り返して確認する
-        for _ in range(30):
-            assert pick_random(questions, exclude="20260820/0").id == "20260820/1"
+
+class TestQuestionShuffler:
+    """全問を 1 つの山として配る抽選器。
+
+    乱数に依存するため、どのテストも複数回繰り返して確認する。
+    1 回の試行では、たまたま期待どおりに並んだだけの場合を弾けない。
+    """
+
+    def test_問題が無ければ_none(self) -> None:
+        shuffler = QuestionShuffler([])
+
+        assert shuffler.take() is None
+        assert shuffler.total == 0
+        assert shuffler.remaining == 0
+
+    def test_一巡するまで同じ問題が出ない(self) -> None:
+        questions = make_questions(5)
+
+        for _ in range(50):
+            shuffler = QuestionShuffler(questions)
+            drawn = [shuffler.take().id for _ in range(5)]
+
+            assert len(set(drawn)) == 5
+
+    def test_出題するたびに残数が減る(self) -> None:
+        shuffler = QuestionShuffler(make_questions(5))
+        assert shuffler.total == 5
+        assert shuffler.remaining == 5
+
+        for expected in (4, 3, 2, 1, 0):
+            shuffler.take()
+            assert shuffler.remaining == expected
+
+    def test_一巡したら山を組み直す(self) -> None:
+        shuffler = QuestionShuffler(make_questions(5))
+        for _ in range(5):
+            shuffler.take()
+        assert shuffler.remaining == 0
+
+        shuffler.take()
+
+        # 組み直した 5 問から 1 問取った状態
+        assert shuffler.remaining == 4
+
+    def test_一巡の境目で同じ問題が連続しない(self) -> None:
+        """組み直した山の先頭が直前の問題と重なると、一巡した意味が無くなる。"""
+        questions = make_questions(5)
+
+        for _ in range(100):
+            shuffler = QuestionShuffler(questions)
+            drawn = [shuffler.take().id for _ in range(6)]
+
+            assert drawn[4] != drawn[5]
+
+    def test_指定した問題を出せる(self) -> None:
+        shuffler = QuestionShuffler(make_questions(5))
+
+        assert shuffler.take("20260820/3").id == "20260820/3"
+
+    def test_指定して出した問題は同じ一巡で再出題されない(self) -> None:
+        questions = make_questions(5)
+
+        for _ in range(50):
+            shuffler = QuestionShuffler(questions)
+            shuffler.take("20260820/3")
+            rest = [shuffler.take().id for _ in range(4)]
+
+            assert "20260820/3" not in rest
+
+    def test_指定出題でも残数が減る(self) -> None:
+        shuffler = QuestionShuffler(make_questions(5))
+
+        shuffler.take("20260820/3")
+
+        assert shuffler.remaining == 4
+
+    def test_知らない問題を指定したら_none(self) -> None:
+        shuffler = QuestionShuffler(make_questions(5))
+
+        assert shuffler.take("20260820/99") is None
+        # 山は減らさない
+        assert shuffler.remaining == 5
+
+    def test_一巡後に知らない問題を指定しても山を組み直さない(self) -> None:
+        """失敗した操作で残数だけが満数へ戻ると、出題していないのに一巡したように見える。"""
+        shuffler = QuestionShuffler(make_questions(5))
+        for _ in range(5):
+            shuffler.take()
+        assert shuffler.remaining == 0
+
+        assert shuffler.take("20260820/99") is None
+
+        assert shuffler.remaining == 0
+
+    def test_出題済みの問題を指定し直せる(self) -> None:
+        """指定は山の順序を無視して任意の問題を出すための操作。山の制約は受けない。"""
+        shuffler = QuestionShuffler(make_questions(5))
+        first = shuffler.take()
+
+        again = shuffler.take(first.id)
+
+        assert again.id == first.id
+
+    def test_1_問しかなければ同じ問題を返し続ける(self) -> None:
+        """候補が尽きるくらいなら同じ問題を返す。出題を止めないため。"""
+        shuffler = QuestionShuffler(make_questions(1))
+
+        assert [shuffler.take().id for _ in range(3)] == ["20260820/0"] * 3
+
+    def test_元のリストが変わっても山は壊れない(self) -> None:
+        questions = make_questions(3)
+        shuffler = QuestionShuffler(questions)
+
+        questions.clear()
+
+        assert shuffler.total == 3
+        assert shuffler.take() is not None
 
 
 class TestSeqWidth:

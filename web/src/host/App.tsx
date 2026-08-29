@@ -376,6 +376,13 @@ export function App() {
         />
         {error !== null && <p className="host-error">{error}</p>}
       </footer>
+
+      {/* 残り問題数。出題者が把握できればよいので、投影の邪魔にならない大きさで隅に置く */}
+      {state !== null && state.total_questions > 0 && (
+        <p className="host-remaining">
+          残り {state.remaining_questions} / {state.total_questions}
+        </p>
+      )}
     </main>
   );
 }

@@ -381,20 +381,91 @@ def load_questions(quiz_data_dir: Path | None = None) -> list[Question]:
     return questions
 
 
-def pick_random(questions: list[Question], exclude: str | None = None) -> Question | None:
-    """次の問題を 1 問選ぶ。
+class QuestionShuffler:
+    """全問を 1 つの山としてシャッフルし、頭から消化していく抽選器。
 
-    直前と同じ問題が続くのを避けるため、候補が 2 問以上あるときは exclude を除外する。
+    単純な乱数選択では、未出題の問題が残っていても既出が繰り返し選ばれる。
+    山を作って頭から配れば、一巡するまで同じ問題は出ない。
+
+    山は起動時に組み、使い切ったら組み直す。プロセス内メモリだけで持ち、
+    永続化しない。会ごとにサーバを立て直す運用であり、前回の履歴を
+    引き継ぐ必要がないため。
+
     複数端末が繋がる以上、次の問題の決定はサーバの 1 箇所で行う。
     """
-    if not questions:
-        return None
 
-    candidates = (
-        [question for question in questions if question.id != exclude]
-        if len(questions) > 1 and exclude is not None
-        else questions
-    )
-    pool = candidates if candidates else questions
+    def __init__(self, questions: list[Question]) -> None:
+        # 呼び出し側のリストが後から変わっても山が壊れないよう複製する
+        self._questions = list(questions)
+        # 未出題の問題。末尾から pop して配るため、山は逆順に積む
+        self._deck: list[Question] = []
+        # 直前に出題した問題。山を組み直すときの重複回避に使う
+        self._last_id: str | None = None
+        self._refill()
 
-    return random.choice(pool)
+    @property
+    def total(self) -> int:
+        """全問数。"""
+        return len(self._questions)
+
+    @property
+    def remaining(self) -> int:
+        """この一巡で、まだ出題していない問題数。"""
+        return len(self._deck)
+
+    def _refill(self) -> None:
+        """山を組み直す。
+
+        末尾から pop するため、シャッフル結果を逆順に積む。こうすると
+        _deck[-1] が「次に出す問題」になり、先頭の重複回避が末尾の
+        入れ替えとして書ける。
+        """
+        shuffled = list(self._questions)
+        random.shuffle(shuffled)
+        self._deck = list(reversed(shuffled))
+
+        # 組み直した山の先頭が直前の問題と同じだと、一巡したのに同じ問題が
+        # 2 回続いて見える。その場合だけ先頭と 2 番目を入れ替える。
+        # 全体を引き直さないのは、引き直しでは最悪ケースで終わらないため。
+        # 2 問目以降は対象にしない（一巡分離れていれば連続とは感じられない）。
+        if (
+            len(self._deck) > 1
+            and self._last_id is not None
+            and self._deck[-1].id == self._last_id
+        ):
+            self._deck[-1], self._deck[-2] = self._deck[-2], self._deck[-1]
+
+    def take(self, question_id: str | None = None) -> Question | None:
+        """次の 1 問を取り出し、山から取り除く。
+
+        question_id を指定した場合はその問題を返し、山に残っていれば取り除く。
+        取り除かないと、指定して出題した問題が後で山の順番どおりに再び出てくる。
+        指定は「山の順序を無視して任意の問題を出す」ための操作なので、
+        すでに出題済みの問題を指定し直すこともできる。
+
+        山が空になったら組み直す。誤答でもスルーでも、一度取り出した問題は
+        山へ戻さない。会場で読み上げられた時点で消費されているため。
+
+        知らない問題 ID を指定した場合は None を返し、山には手を付けない。
+        """
+        if not self._questions:
+            return None
+
+        if question_id is not None:
+            # 山に触れる前に問題を引き当てる。組み直しを先に置くと、知らない ID で
+            # 失敗したときに山だけが組み直され、出題していないのに残数が満数へ
+            # 戻ってしまう（失敗した操作が状態を変えることになる）。
+            question = next((q for q in self._questions if q.id == question_id), None)
+            if question is None:
+                return None
+            self._deck = [q for q in self._deck if q.id != question_id]
+        else:
+            # 山を組み直すのは取り出しの直前だけにする。取り出した後に先回りして
+            # 組み直すと、最後の 1 問を出した時点で残数が満数に戻ってしまい、
+            # 「残り 0」が表示されないまま一巡が終わったように見える。
+            if not self._deck:
+                self._refill()
+            question = self._deck.pop()
+
+        self._last_id = question.id
+        return question

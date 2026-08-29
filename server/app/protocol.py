@@ -179,6 +179,10 @@ class RoomStateMessage(BaseModel):
     # 回答者へは None にして送る
     question: QuestionView | None = None
     judgement: JudgementView | None = None
+    # この一巡で未出題の問題数と全問数。出題者が残りを把握するために使う。
+    # 正解の手がかりにはならないので回答者にも送るが、表示するのは出題者画面だけ。
+    remaining_questions: int = 0
+    total_questions: int = 0
 
 
 class BuzzAcceptedMessage(BaseModel):

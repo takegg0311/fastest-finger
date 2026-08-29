@@ -93,6 +93,10 @@ export type RoomStateMessage = {
   buzzed: BuzzedView | null;
   question: QuestionView | null;
   judgement: JudgementView | null;
+  /** この一巡で未出題の問題数 */
+  remaining_questions: number;
+  /** 全問数 */
+  total_questions: number;
 };
 
 export type BuzzAcceptedMessage = {
